@@ -56,9 +56,15 @@ async function activeTabStats(): Promise<StatsResponse | undefined> {
   }
 }
 
+/** What renderTab last drew, so the once-a-second refresh leaves the DOM alone when nothing changed. */
+let lastTab = "";
+
 async function renderTab(): Promise<void> {
   const body = $("tab-body");
   const stats = await activeTabStats();
+  const key = JSON.stringify(stats ?? null);
+  if (key === lastTab) return;
+  lastTab = key;
   if (!stats) {
     body.innerHTML = `<div class="note">Open YouTube to see what's filtered here. If YouTube is already open, reload the tab.</div>`;
     return;

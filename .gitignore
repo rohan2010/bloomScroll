@@ -68,3 +68,6 @@ docs/assets/.frames/
 # Machine-specific login item and helper config, written by setup.sh
 server/autostart/
 server/laya.log
+
+# Internal notes on caching, learning and efficiency (kept local)
+docs/internals.md

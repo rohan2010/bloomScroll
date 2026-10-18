@@ -169,6 +169,17 @@ describe("decideBatch", () => {
     expect(metrics).toMatchObject({ rule: 2, failOpen: 0 });
   });
 
+  it("a correction beats a cached decision for the same video", async () => {
+    const store = memoryStore();
+    const s = settings();
+    await store.putMany([{ videoId: "a", verdict: "show", confidence: 1, stage: "model", reason: "cached", modeId: modeIdFor(s), decidedAt: 1 }]);
+    const labels = { getLabels: async (ids: string[]) => ids.map((id) => ({ videoId: id, title: "", channel: "", userVerdict: "hide" as const, at: 2 })) };
+    const metrics = emptyMetrics();
+    const [d] = await decideBatch([tile("a", "anything")], { settings: s, labels, store, metrics });
+    expect(d).toMatchObject({ verdict: "hide", reason: "you hid this" });
+    expect(metrics.cached).toBe(0);
+  });
+
   it("ignores corrections when filtering is off", async () => {
     const labels = { getLabels: async (ids: string[]) => ids.map((id) => ({ videoId: id, title: "", channel: "", userVerdict: "hide" as const, at: 1 })) };
     const [d] = await decideBatch([tile("a", "anything")], { settings: settings({ mode: "off" }), labels });

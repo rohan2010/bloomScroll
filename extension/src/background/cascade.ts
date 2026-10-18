@@ -152,21 +152,18 @@ export async function decideBatch(tiles: VideoTile[], deps: CascadeDeps): Promis
 
   // 0a. The user's own corrections win over everything, in every filtering mode. Not cached as
   // decisions: the label store is the source of truth, and the user can flip it.
-  if (deps.labels && s.mode !== "off") {
-    const labels = await deps.labels.getLabels(unique.map((t) => t.videoId)).catch(() => []);
-    labels.forEach((l) => {
-      if (!l) return;
-      decided.set(l.videoId, { verdict: l.userVerdict, confidence: 1, stage: "rule", reason: l.userVerdict === "show" ? USER_SHOWN : USER_HIDDEN });
-      uncacheable.add(l.videoId);
-    });
-  }
-
-  // 0b. Cache
-  if (store) {
-    const pendingIds = unique.filter((t) => !decided.has(t.videoId));
-    const hits = await store.getMany(pendingIds.map((t) => cacheKey(modeId, t.videoId))).catch(() => []);
-    hits.forEach((d) => d && cached.set(d.videoId, d));
-  }
+  // 0b. Cache. Both lookups run at once; a label still beats a cached decision for the same video.
+  const ids = unique.map((t) => t.videoId);
+  const [labels, hits] = await Promise.all([
+    deps.labels && s.mode !== "off" ? deps.labels.getLabels(ids).catch(() => []) : [],
+    store ? store.getMany(ids.map((id) => cacheKey(modeId, id))).catch(() => []) : [],
+  ]);
+  labels.forEach((l) => {
+    if (!l) return;
+    decided.set(l.videoId, { verdict: l.userVerdict, confidence: 1, stage: "rule", reason: l.userVerdict === "show" ? USER_SHOWN : USER_HIDDEN });
+    uncacheable.add(l.videoId);
+  });
+  hits.forEach((d) => d && !decided.has(d.videoId) && cached.set(d.videoId, d));
   let open = unique.filter((t) => !cached.has(t.videoId) && !decided.has(t.videoId));
   const msCache = lap();
 

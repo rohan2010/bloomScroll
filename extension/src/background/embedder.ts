@@ -1,4 +1,4 @@
-import type { EmbedRequest, EmbedResponse } from "../shared/messages";
+import { EMBED_MODEL, type EmbedRequest, type EmbedResponse } from "../shared/messages";
 import { distractorsFor } from "../shared/intent";
 import type { EmbedScore, Embedder } from "./cascade";
 
@@ -22,12 +22,31 @@ async function ensureOffscreen(): Promise<void> {
 
 export type EmbedFn = (texts: string[]) => Promise<number[][]>;
 
+/** Set once this worker has seen the offscreen document, so later calls skip the getContexts round trip. */
+let offscreenUp = false;
+
 async function offscreenEmbed(texts: string[]): Promise<number[][]> {
-  await ensureOffscreen();
   const msg: EmbedRequest = { target: "offscreen", type: "embed", texts };
-  const res: EmbedResponse | undefined = await chrome.runtime.sendMessage(msg);
+  const assumed = offscreenUp;
+  if (!assumed) await ensureOffscreen();
+  offscreenUp = true;
+  let res: EmbedResponse | undefined = assumed ? await chrome.runtime.sendMessage(msg).catch(() => undefined) : await chrome.runtime.sendMessage(msg);
+  if (!res && assumed) {
+    // Nobody answered: the document went away since we last checked. Recreate it and ask once more.
+    offscreenUp = false;
+    await ensureOffscreen();
+    offscreenUp = true;
+    res = await chrome.runtime.sendMessage(msg);
+  }
   if (!res || "error" in res) throw new Error(`embed failed: ${res?.error ?? "no response"}`);
   return res.vectors;
+}
+
+/** Keeps topic and anchor vectors across worker restarts, so a woken worker doesn't re-embed them. */
+export interface VectorStore {
+  getVectors(key: string): Promise<number[][] | undefined>;
+  /** Replaces whatever was stored: one topic list at a time is enough. */
+  putVectors(key: string, texts: string[], vectors: number[][]): Promise<void>;
 }
 
 function dot(a: number[], b: number[]): number {
@@ -59,7 +78,20 @@ export class OffscreenEmbedder implements Embedder {
   private scores = new Map<string, EmbedScore>();
   private scoresFor = "";
 
-  constructor(private embedTexts: EmbedFn = offscreenEmbed) {}
+  constructor(
+    private embedTexts: EmbedFn = offscreenEmbed,
+    private store?: VectorStore,
+  ) {}
+
+  /** Embeds the fixed texts (topics and anchors) once, then serves them from the store. */
+  private async fixedVectors(texts: string[]): Promise<number[][]> {
+    const key = JSON.stringify([EMBED_MODEL, texts]);
+    const stored = await this.store?.getVectors(key).catch(() => undefined);
+    if (stored?.length === texts.length) return stored;
+    const vecs = await this.embedTexts(texts);
+    this.store?.putVectors(key, texts, vecs).catch(() => {});
+    return vecs;
+  }
 
   private anchorsFor(topics: string[]): Promise<Anchors> {
     const key = JSON.stringify(topics);
@@ -67,7 +99,7 @@ export class OffscreenEmbedder implements Embedder {
     if (!p) {
       const off = distractorsFor(topics);
       const anchors = Object.keys(off);
-      p = this.embedTexts([...topics, ...Object.values(off)]).then((vecs) => ({
+      p = this.fixedVectors([...topics, ...Object.values(off)]).then((vecs) => ({
         topics,
         topicVecs: vecs.slice(0, topics.length),
         anchors,

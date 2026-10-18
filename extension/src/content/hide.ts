@@ -67,9 +67,15 @@ function cancelAnimations(el: Element): void {
   el.removeAttribute("data-bloom-fx");
 }
 
-function onScreen(el: Element): boolean {
-  const r = el.getBoundingClientRect();
-  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight;
+/** A tile's box and margins, read before any writes so a batch of verdicts costs one layout. */
+type Geometry = { rect: DOMRect; margins: Pick<CSSStyleDeclaration, "marginTop" | "marginBottom" | "marginLeft" | "marginRight"> };
+
+/** Geometry of an on-screen tile, or undefined when it's off screen (nothing to watch). */
+function onScreenGeometry(el: Element): Geometry | undefined {
+  const rect = el.getBoundingClientRect();
+  if (!(rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight)) return undefined;
+  const { marginTop, marginBottom, marginLeft, marginRight } = getComputedStyle(el);
+  return { rect, margins: { marginTop, marginBottom, marginLeft, marginRight } };
 }
 
 const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
@@ -79,9 +85,7 @@ const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
  * dither.ts), then its space collapses so neighbours slide in. Grid tiles (home) collapse
  * sideways, list tiles (sidebar, search) upward.
  */
-function destroy(el: HTMLElement): void {
-  const r = el.getBoundingClientRect();
-  const cs = getComputedStyle(el);
+function destroy(el: HTMLElement, { rect: r, margins: cs }: Geometry): void {
   const sideways = el.tagName === "YTD-RICH-ITEM-RENDERER";
   const anims: Animation[] = [];
   const fx = ditherLayer.dissolve(el);
@@ -136,7 +140,23 @@ export function markPending(el: Element): void {
   el.removeAttribute("data-bloom-stage");
 }
 
-export function applyVerdict(el: Element, d: Pick<Decision, "verdict"> & Partial<Pick<Decision, "stage">>, animate = false): void {
+type VerdictLike = Pick<Decision, "verdict"> & Partial<Pick<Decision, "stage">>;
+
+export function applyVerdict(el: Element, d: VerdictLike, animate = false): void {
+  applyWith(el, d, animate && d.verdict === "hide" && el instanceof HTMLElement ? onScreenGeometry(el) : undefined);
+}
+
+/**
+ * Many verdicts at once: every layout read happens before the first write, so hiding a screenful of
+ * tiles forces one layout instead of one per tile.
+ */
+export function applyVerdicts(items: [Element, VerdictLike][], animate = false): void {
+  const geometry = items.map(([el, d]) => (animate && d.verdict === "hide" && el instanceof HTMLElement ? onScreenGeometry(el) : undefined));
+  items.forEach(([el, d], i) => applyWith(el, d, geometry[i]));
+}
+
+/** geometry is set only for an on-screen tile that should animate out. */
+function applyWith(el: Element, d: VerdictLike, geometry: Geometry | undefined): void {
   cancelAnimations(el);
   el.classList.remove(PENDING);
   el.setAttribute("data-bloom", d.verdict);
@@ -147,7 +167,7 @@ export function applyVerdict(el: Element, d: Pick<Decision, "verdict"> & Partial
     return;
   }
   // Off screen there's nothing to watch, so skip straight to hidden.
-  if (animate && el instanceof HTMLElement && onScreen(el)) destroy(el);
+  if (geometry && el instanceof HTMLElement) destroy(el, geometry);
   else el.classList.add(HIDDEN);
 }
 

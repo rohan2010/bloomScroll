@@ -64,6 +64,11 @@ function channelIdFromHref(href: string | null): string | undefined {
   return m[2] ?? decodeURIComponent(m[1]);
 }
 
+/** The video a tile links to: the cheap part of extractTile, for checking whether a node was recycled. */
+export function linkedVideoId(el: Element): string | undefined {
+  return videoIdFromHref(first(el, S.LINK)?.getAttribute("href"))?.videoId;
+}
+
 export function extractTile(el: Element, surface: TileSurface): VideoTile | null {
   const link = first(el, S.LINK);
   const id = videoIdFromHref(link?.getAttribute("href"));
@@ -88,6 +93,11 @@ export function extractTile(el: Element, surface: TileSurface): VideoTile | null
 }
 
 const TILE_SELECTOR = S.TILE.join(",");
+
+/** One selector matching any of the surface's scan roots. */
+export function surfaceRootSelector(surface: TileSurface): string {
+  return S.SURFACE_ROOTS[surface].join(",");
+}
 
 export function surfaceRoots(doc: ParentNode, surface: TileSurface): ParentNode[] {
   const roots = S.SURFACE_ROOTS[surface].flatMap((sel) => [...doc.querySelectorAll(sel)]);

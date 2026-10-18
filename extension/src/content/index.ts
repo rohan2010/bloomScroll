@@ -16,16 +16,17 @@ import { decisionKey, loadSettings, modeUsesModel, onSettingsChanged } from "../
 import { DebugPanel } from "./debug";
 import { HiddenDrawer, type HiddenEntry } from "./drawer";
 import { HideButton } from "./feedback";
-import { extractTiles, surfaceFor } from "./extract";
-import { animationsOn, applyUiToggles, applyVerdict, clearTile, injectStyles, isHidden, markPending } from "./hide";
+import { extractTile, findTileElements, linkedVideoId, surfaceFor, surfaceRootSelector, type TileSurface } from "./extract";
+import { animationsOn, applyUiToggles, applyVerdict, applyVerdicts, clearTile, injectStyles, isHidden, markPending } from "./hide";
 import { PagePerf, type Phase } from "./perf";
 
 const DEBOUNCE_MS = 150;
 /** How long to wait before re-asking about tiles shown only because no model answered. */
 const RETRY_MS = 20_000;
 /**
- * Tiles per model request. A local model costs ~400 ms per tile whatever the batch size, so small
- * batches only make answers land sooner; the queue is re-sorted by viewport before each one.
+ * Tiles per model request. Local Laya costs ~400 ms/tile on a 2-core Intel CPU whatever the batch
+ * size, and on Apple Silicon ~24 ms/tile at 4 vs ~22 at 16-40, so 4 keeps answers landing early at
+ * almost no throughput cost; the queue is re-sorted by viewport before each one.
  */
 const MODEL_CHUNK = 4;
 const DEBUG_RENDER_MS = 250;
@@ -111,6 +112,65 @@ function resetAll(): void {
   renderDebugSoon();
 }
 
+/** Our own overlay hosts (drawer, debug panel, Hide button, dither layer). */
+function isOwnNode(n: Node): boolean {
+  return n.nodeName.startsWith("BLOOMSCROLL-");
+}
+
+/**
+ * Whether a batch of mutations could add, remove or change a tile. YouTube's player rewrites its
+ * clock and other text several times a second; text-only changes outside the feed can't, and
+ * neither can our own overlays coming and going.
+ */
+function mutationsMatter(records: MutationRecord[]): boolean {
+  let roots: string | null | undefined;
+  let rootsOnPage: boolean | undefined;
+  for (const r of records) {
+    if (r.type !== "childList") return true; // href changed: a recycled tile
+    let textOnly = true;
+    let ownOnly = true;
+    for (const list of [r.addedNodes, r.removedNodes]) {
+      for (const n of list) {
+        if (isOwnNode(n)) continue;
+        ownOnly = false;
+        if (n.nodeType === Node.ELEMENT_NODE) textOnly = false;
+      }
+    }
+    if (ownOnly) continue;
+    if (!textOnly) return true;
+    // Text changed: matters inside a scanned root (titles fill in lazily), or anywhere when the
+    // page has no roots and the scan falls back to the whole document.
+    if (roots === undefined) {
+      const surface = surfaceFor(location.pathname);
+      roots = surface && surfaceRootSelector(surface);
+    }
+    if (!roots) continue;
+    const target = r.target instanceof Element ? r.target : r.target.parentElement;
+    if (target?.closest(roots)) return true;
+    rootsOnPage ??= document.querySelector(roots) !== null;
+    if (!rootsOnPage) return true;
+  }
+  return false;
+}
+
+/**
+ * Tiles on the page. A node still showing the video it was handled for reuses that tile: only its
+ * link is read, not its title, channel and duration, so rescans of a settled feed stay cheap.
+ */
+function findTiles(surface: TileSurface): { el: Element; tile: VideoTile }[] {
+  const out: { el: Element; tile: VideoTile }[] = [];
+  for (const el of findTileElements(document, surface)) {
+    const known = tracked.get(el)?.tile;
+    if (known && el.getAttribute("data-bloom-id") === known.videoId && linkedVideoId(el) === known.videoId) {
+      out.push({ el, tile: known });
+      continue;
+    }
+    const tile = extractTile(el, surface);
+    if (tile) out.push({ el, tile });
+  }
+  return out;
+}
+
 async function scan(): Promise<void> {
   const surface = surfaceFor(location.pathname);
   if (!surface || settings.mode === "off") {
@@ -123,7 +183,7 @@ async function scan(): Promise<void> {
   drawer.mount();
   drawer.setVisible(true);
 
-  const found = extractTiles(document, surface);
+  const found = findTiles(surface);
   lastFound = found.map((f) => f.el);
   const batch = new Map<string, VideoTile>();
   const now = performance.now();
@@ -157,7 +217,7 @@ async function scan(): Promise<void> {
 type Answer = { decisions: Map<string, Decision>; startedWall: number };
 
 function applyDecisions({ decisions, startedWall }: Answer, phase: Phase): void {
-  const animate = animationsOn(settings);
+  const verdicts: Parameters<typeof applyVerdicts>[0] = [];
   for (const [el, t] of tracked) {
     const d = decisions.get(t.tile.videoId);
     if (!d || el.getAttribute("data-bloom-id") !== t.tile.videoId) continue;
@@ -165,22 +225,27 @@ function applyDecisions({ decisions, startedWall }: Answer, phase: Phase): void 
     if (t.decision && (t.decision.reason === USER_HIDDEN || t.decision.reason === USER_SHOWN) && d.reason !== t.decision.reason) continue;
     const first = !t.decision;
     t.decision = d;
-    applyVerdict(el, overrides.has(d.videoId) ? { verdict: "show" } : d, animate);
+    verdicts.push([el, overrides.has(d.videoId) ? { verdict: "show" } : d]);
     if (first) perf.recordDecision(t.tile, d, t.seenAt, d.decidedAt < startedWall, phase);
   }
+  applyVerdicts(verdicts, animationsOn(settings));
   refreshDrawer();
 }
 
-/** Distance of a tile from the visible area: 0 on screen, else pixels away (above counts double). */
-function viewportDistance(videoId: string): number {
-  let best = Infinity;
+/**
+ * Distance of each queued video's nearest tile from the visible area: 0 on screen, else pixels
+ * away (above counts double). One pass over the tracked tiles; a video missing has left the page.
+ */
+function queueDistances(): Map<string, number> {
+  const out = new Map<string, number>();
   for (const [el, t] of tracked) {
-    if (t.tile.videoId !== videoId || !el.isConnected) continue;
+    const id = t.tile.videoId;
+    if (!modelQueue.has(id) || !el.isConnected) continue;
     const r = el.getBoundingClientRect();
     const d = r.bottom < 0 ? -r.bottom * 2 : r.top > innerHeight ? r.top - innerHeight : 0;
-    best = Math.min(best, d);
+    out.set(id, Math.min(out.get(id) ?? Infinity, d));
   }
-  return best;
+  return out;
 }
 
 /** Works through the model queue one small batch at a time, re-prioritising as the user scrolls. */
@@ -190,9 +255,9 @@ async function pump(): Promise<void> {
   const gen = generation;
   try {
     while (modelQueue.size && gen === generation) {
-      const ranked = [...modelQueue.values()].map((t) => [viewportDistance(t.videoId), t] as const).sort((a, b) => a[0] - b[0]);
-      for (const [dist, t] of ranked) if (dist === Infinity) modelQueue.delete(t.videoId); // tile left the page
-      const next = ranked.filter(([dist]) => dist !== Infinity).slice(0, MODEL_CHUNK).map(([, t]) => t);
+      const dist = queueDistances();
+      for (const id of modelQueue.keys()) if (!dist.has(id)) modelQueue.delete(id); // tile left the page
+      const next = [...modelQueue.values()].sort((a, b) => dist.get(a.videoId)! - dist.get(b.videoId)!).slice(0, MODEL_CHUNK);
       if (!next.length) break;
       for (const t of next) modelQueue.delete(t.videoId);
       renderDebugSoon();
@@ -222,14 +287,31 @@ function scheduleRetry(): void {
   if (retryTimer || orphaned) return;
   const failedOpen = () => [...tracked].filter(([, t]) => t.decision?.reason === NO_MODEL_REASON || (!t.decision && failed.has(t.tile.videoId)));
   if (!failedOpen().length) return;
-  retryTimer = setTimeout(() => {
+  retryTimer = setTimeout(async () => {
+    // Re-asking about fail-open tiles only helps once the model is reachable; until then, check
+    // again later instead of re-running the whole cascade for them every time.
+    const down = await modelUnreachable();
     retryTimer = undefined;
-    for (const [el, t] of failedOpen()) {
+    if (orphaned) return;
+    const retry = failedOpen().filter(([, t]) => !(down && t.decision?.reason === NO_MODEL_REASON));
+    for (const [el, t] of retry) {
       el.removeAttribute("data-bloom-id");
       failed.delete(t.tile.videoId);
     }
-    scan();
+    if (retry.length) scan();
+    else scheduleRetry();
   }, RETRY_MS);
+}
+
+/** True only when the worker positively reports the model can't answer (a failed check retries anyway). */
+async function modelUnreachable(): Promise<boolean> {
+  if (!contextAlive()) return false;
+  try {
+    const st: BackendStatus | undefined = await chrome.runtime.sendMessage({ type: "status" } satisfies StatusRequest);
+    return st?.state === "down" || st?.state === "no-permission" || st?.state === "invalid-url";
+  } catch {
+    return false;
+  }
 }
 
 /** null when the request itself failed; those tiles are shown (fail open) and retried later. */
@@ -251,7 +333,8 @@ async function requestDecisions(tiles: VideoTile[], stages: "fast" | "all"): Pro
     console.warn("[bloomScroll] decide failed, showing tiles:", res?.error);
     for (const tile of tiles) failed.add(tile.videoId);
     // Fail open: never leave the feed stuck faded.
-    for (const tile of tiles) for (const [el, t] of tracked) if (t.tile.videoId === tile.videoId) applyVerdict(el, { verdict: "show" });
+    const ids = new Set(tiles.map((t) => t.videoId));
+    for (const [el, t] of tracked) if (ids.has(t.tile.videoId)) applyVerdict(el, { verdict: "show" });
     scheduleRetry();
     return null;
   }
@@ -471,7 +554,7 @@ async function main(): Promise<void> {
     cancelAnimationFrame(hoverFrame);
   };
 
-  observer = new MutationObserver(scheduleScan);
+  observer = new MutationObserver((records) => mutationsMatter(records) && scheduleScan());
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,

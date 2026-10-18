@@ -32,7 +32,17 @@ type Job = {
   seed: number;
   resolve: () => void;
   reject: (reason: unknown) => void;
+  /** Per-cell thresholds for a cols x rows grid, computed on the first frame (tiles don't resize mid-dissolve). */
+  grid?: { cols: number; rows: number; t: Float32Array };
 };
+
+function gridFor(job: Job, cols: number, rows: number): Float32Array {
+  if (job.grid?.cols === cols && job.grid.rows === rows) return job.grid.t;
+  const t = new Float32Array(cols * rows);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) t[j * cols + i] = threshold(i, j, rows, job.seed);
+  job.grid = { cols, rows, t };
+  return t;
+}
 
 const easeIn = (t: number) => t * t * (3 - 2 * t); // smoothstep
 
@@ -55,6 +65,8 @@ class DitherLayer {
   private ctx?: CanvasRenderingContext2D;
   private jobs = new Set<Job>();
   private raf = 0;
+  /** Page colours, read once per run of the effect: getComputedStyle every frame forces a style pass. */
+  private colors?: { bg: string; edge: string };
 
   /** Resolves when the tile is fully covered; the caller hides it in that same frame. */
   dissolve(el: Element): { done: Promise<void>; cancel: () => void } {
@@ -96,8 +108,7 @@ class DitherLayer {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, innerWidth, innerHeight);
 
-    const bg = pageBackground();
-    const edge = edgeColor();
+    const { bg, edge } = (this.colors ??= { bg: pageBackground(), edge: edgeColor() });
     for (const job of this.jobs) {
       const p = Math.min(1, (now - job.start) / DURATION);
       if (p >= 1 || !job.el.isConnected) {
@@ -113,9 +124,10 @@ class DitherLayer {
       const front = easeIn(p) * (1 + EDGE);
       const gone = new Path2D();
       const burning = new Path2D();
+      const grid = gridFor(job, cols, rows);
       for (let j = 0; j < rows; j++) {
         for (let i = 0; i < cols; i++) {
-          const t = threshold(i, j, rows, job.seed);
+          const t = grid[j * cols + i];
           if (t < front - EDGE) gone.rect(r.left + i * CELL, r.top + j * CELL, CELL, CELL);
           else if (t < front) burning.rect(r.left + i * CELL, r.top + j * CELL, CELL, CELL);
         }
@@ -131,7 +143,10 @@ class DitherLayer {
       ctx.restore();
     }
     if (this.jobs.size) this.raf = requestAnimationFrame(this.frame);
-    else this.host?.remove();
+    else {
+      this.host?.remove();
+      this.colors = undefined; // the theme may change before the next run
+    }
   };
 }
 

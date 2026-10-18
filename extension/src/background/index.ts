@@ -1,5 +1,5 @@
 import { emptyMetrics, type BackendStatus, type BackgroundMessage, type CascadeMetrics, type DecideResponse, type LayaControlRequest, type LayaControlResponse } from "../shared/messages";
-import { loadSettings, modeUsesModel, topicsFor } from "../shared/settings";
+import { loadSettings as readSettings, modeUsesModel, onSettingsChanged, topicsFor } from "../shared/settings";
 import { backendFromSettings } from "./backends";
 import { IdbCache } from "./cache";
 import { calibrate } from "./calibrate";
@@ -8,7 +8,21 @@ import { cacheKey, decideBatch, modeIdFor } from "./cascade";
 import type { Decision, Settings, VideoTile } from "../shared/types";
 
 const cache = new IdbCache();
-const embedder = new OffscreenEmbedder();
+const embedder = new OffscreenEmbedder(undefined, cache);
+
+/**
+ * Settings, read from storage once per worker lifetime and kept current by the change listener:
+ * every decide message needs them, and a feed sends one per batch.
+ */
+let settingsCache: Promise<Settings> | undefined;
+function loadSettings(): Promise<Settings> {
+  settingsCache ??= readSettings().catch((err) => {
+    settingsCache = undefined;
+    throw err;
+  });
+  return settingsCache;
+}
+onSettingsChanged((s) => (settingsCache = Promise.resolve(s)));
 
 /** Decisions being computed, so a tile asked about twice (retries, two tabs) costs one model call. */
 const inFlight = new Map<string, Promise<Decision | undefined>>();
@@ -36,7 +50,9 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") chrome.runtime.openOptionsPage();
 });
 
-cache.prune().catch((err) => console.warn("[bloomScroll] prune failed:", err));
+// Pruning takes a write lock on the decision store; run it after the wake-up burst of decide
+// requests (expired rows already read as misses, so the delay changes nothing they see).
+setTimeout(() => cache.prune().catch((err) => console.warn("[bloomScroll] prune failed:", err)), 5_000);
 
 const WARM_EVERY_MS = 30_000;
 let lastWarm = 0;

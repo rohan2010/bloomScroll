@@ -16,7 +16,7 @@ const d = (videoId: string, decidedAt: number): Decision => ({
 describe("IdbCache", () => {
   it("round-trips decisions by mode + video", async () => {
     const cache = new IdbCache(openBloomDb("t1"));
-    await cache.putMany([d("a", 1), d("b", 2)]);
+    await cache.putMany([d("a", Date.now()), d("b", Date.now())]);
     const [a, missing] = await cache.getMany(["work-x:a", "work-x:zzz"]);
     expect(a).toMatchObject({ videoId: "a" });
     expect(missing).toBeUndefined();
@@ -27,7 +27,14 @@ describe("IdbCache", () => {
     const now = 10 * DECISION_TTL_MS;
     await cache.putMany([d("old", now - DECISION_TTL_MS - 1), d("new", now - 1)]);
     expect(await cache.prune(now)).toBe(1);
-    expect((await cache.getMany(["work-x:old", "work-x:new"])).map(Boolean)).toEqual([false, true]);
+    expect((await cache.getMany(["work-x:old", "work-x:new"], now)).map(Boolean)).toEqual([false, true]);
+  });
+
+  it("treats decisions past the TTL as misses before they're pruned", async () => {
+    const cache = new IdbCache(openBloomDb("t4"));
+    const now = 10 * DECISION_TTL_MS;
+    await cache.putMany([d("old", now - DECISION_TTL_MS - 1), d("new", now - 1)]);
+    expect((await cache.getMany(["work-x:old", "work-x:new"], now)).map(Boolean)).toEqual([false, true]);
   });
 
   it("stores labels ordered by time", async () => {

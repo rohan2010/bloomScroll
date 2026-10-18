@@ -2,6 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Decision, Label } from "../shared/types";
 import type { ReviewItem } from "../shared/messages";
 import { cacheKey, type DecisionStore, type LabelStore } from "./cascade";
+import type { VectorStore } from "./embedder";
 
 export const DECISION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 export const DECISION_CAP = 20_000;
@@ -25,12 +26,14 @@ export function openBloomDb(name = "bloomscroll"): Promise<IDBPDatabase<BloomDB>
   });
 }
 
-export class IdbCache implements DecisionStore, LabelStore {
+export class IdbCache implements DecisionStore, LabelStore, VectorStore {
   constructor(private db: Promise<IDBPDatabase<BloomDB>> = openBloomDb()) {}
 
-  async getMany(keys: string[]): Promise<(Decision | undefined)[]> {
+  /** Rows past the TTL count as misses, so they're re-decided even before prune() removes them. */
+  async getMany(keys: string[], now = Date.now()): Promise<(Decision | undefined)[]> {
     const tx = (await this.db).transaction("decisions");
-    return Promise.all(keys.map((k) => tx.store.get(k)));
+    const rows = await Promise.all(keys.map((k) => tx.store.get(k)));
+    return rows.map((r) => (r && r.decidedAt > now - DECISION_TTL_MS ? r : undefined));
   }
 
   async putMany(decisions: (Decision & { title?: string; channel?: string })[]): Promise<void> {
@@ -81,6 +84,16 @@ export class IdbCache implements DecisionStore, LabelStore {
     const half = Math.ceil(n / 2);
     const pick = [...hidden.slice(0, half), ...shown.slice(0, n - Math.min(half, hidden.length))].slice(0, n);
     return shuffle(pick).map((r) => ({ videoId: r.videoId, title: r.title!, channel: r.channel ?? "", verdict: r.verdict, reason: r.reason }));
+  }
+
+  async getVectors(key: string): Promise<number[][] | undefined> {
+    const row = await (await this.db).get("embeddings", key);
+    return row?.vectors.map((v) => Array.from(v));
+  }
+
+  async putVectors(key: string, texts: string[], vectors: number[][]): Promise<void> {
+    const tx = (await this.db).transaction("embeddings", "readwrite");
+    await Promise.all([tx.store.clear(), tx.store.put({ hash: key, topics: texts, vectors: vectors.map((v) => Float32Array.from(v)) }), tx.done]);
   }
 
   async clearDecisions(): Promise<void> {
