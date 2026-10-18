@@ -57,13 +57,14 @@
             <input id="apiKey" type="password" autocomplete="off" />
           </div>
           <p id="jev-notice" class="notice" hidden>Jev sends video titles and channel names to TypeSafe. Local backends send nothing off this machine.</p>
-          <p class="hint">Without a reachable model, bloomScroll still applies your channel lists and title keywords, and shows everything else.</p>
+          <p class="hint">The model backend is optional. Without one, bloomScroll still filters with your channel lists, title keywords and its built-in mini model, and shows anything it can't decide.</p>
         </section>
 
         <section>
           <h2>Thresholds</h2>
-          <div class="row"><label for="embedShow">Embedding show ≥</label><input id="embedShow" type="number" min="0" max="1" step="0.01" /></div>
-          <div class="row"><label for="embedHide">Embedding hide ≤</label><input id="embedHide" type="number" min="0" max="1" step="0.01" /></div>
+          <p class="hint">Embedding margin = how much closer a title is to your topics than to off-topic categories (gaming, food, music…). Between the two margins, the model decides.</p>
+          <div class="row"><label for="embedMarginShow">Embedding show if margin ≥</label><input id="embedMarginShow" type="number" min="-1" max="1" step="0.01" /></div>
+          <div class="row"><label for="embedMarginHide">Embedding hide if margin ≤</label><input id="embedMarginHide" type="number" min="-1" max="1" step="0.01" /></div>
           <div class="row"><label for="modelShow">Model show if P(on-intent) ≥</label><input id="modelShow" type="number" min="0" max="1" step="0.01" /></div>
           <div class="row"><label for="modelMinConf">Model min confidence</label><input id="modelMinConf" type="number" min="0.5" max="1" step="0.01" /></div>
         </section>

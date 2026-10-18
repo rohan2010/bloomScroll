@@ -3,6 +3,8 @@
   :root { --bg: #121212; --card: #1b1b1b; --fg: #eaeaea; --muted: #9a9a9a; --line: #333; --accent: #3fa36b; --danger: #f2827a; --warn-bg: #3a2c12; --warn-fg: #f3c77a; }
 }
 * { box-sizing: border-box; }
+/* .row sets display:grid, which would otherwise override the hidden attribute. */
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
 main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
 h1 { margin: 0 0 4px; }

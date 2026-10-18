@@ -3,13 +3,13 @@ import {
   buildBatchRequest,
   buildSystemOneRequest,
   createJevWireBackend,
-  DISTRACTORS,
   intentCriteria,
   onIntentProb,
   parseBatchResponse,
   parseSystemOneResponse,
 } from "../../extension/src/background/backends/jevWire";
 import { TECH_TOPICS } from "../../extension/src/shared/settings";
+import { DISTRACTORS } from "../../extension/src/shared/intent";
 import { createLayaBackend } from "../../extension/src/background/backends/laya";
 import type { VideoTile } from "../../extension/src/shared/types";
 
@@ -44,8 +44,10 @@ describe("requests", () => {
 });
 
 describe("criteria", () => {
-  it("keeps every distractor for the built-in tech topics", () => {
-    expect(Object.keys(intentCriteria(TECH_TOPICS))).toEqual(["on-intent", ...Object.keys(DISTRACTORS)]);
+  it("keeps every distractor for the built-in tech topics, as bare labels", () => {
+    const crit = intentCriteria(TECH_TOPICS);
+    expect(Object.keys(crit)).toEqual(["on-intent", ...Object.keys(DISTRACTORS)]);
+    expect(Object.values(crit).slice(1).every((v) => v === null)).toBe(true);
   });
 
   it("drops distractors that overlap a user topic", () => {

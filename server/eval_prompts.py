@@ -50,9 +50,13 @@ TOPICS = ", ".join(TECH)
 ASK = "What is this YouTube video mainly about?"
 
 # name -> (question, function from answer to P(on-intent))
+LABELS = {k: None for k in DISTRACTORS}
 VARIANTS = {
-    "multi (current)": ({"type": "choice", "instructions": ASK, "criteria": {"on-intent": TOPICS, **DISTRACTORS}},
+    "multi (current)": ({"type": "choice", "instructions": ASK,
+                         "criteria": {"on-intent": "programming, software, computers, AI", **LABELS}},
                         lambda a: a["probabilities"]["on-intent"] / sum(a["probabilities"].values())),
+    "multi, described": ({"type": "choice", "instructions": ASK, "criteria": {"on-intent": TOPICS, **DISTRACTORS}},
+                         lambda a: a["probabilities"]["on-intent"] / sum(a["probabilities"].values())),
     "two-option": ({"type": "choice", "instructions": ASK,
                     "criteria": {"on-intent": TOPICS, "off-intent": "anything else: entertainment, gaming, food, sports, music, lifestyle, news"}},
                    lambda a: a["probabilities"]["on-intent"] / sum(a["probabilities"].values())),

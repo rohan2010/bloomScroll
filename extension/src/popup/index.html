@@ -6,7 +6,29 @@
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <header><strong>bloomScroll</strong><a id="options" href="#">Settings</a></header>
+    <header class="top">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <g fill="currentColor">
+          <ellipse cx="16" cy="8.5" rx="4.2" ry="6.5" />
+          <ellipse cx="16" cy="8.5" rx="4.2" ry="6.5" transform="rotate(72 16 16)" />
+          <ellipse cx="16" cy="8.5" rx="4.2" ry="6.5" transform="rotate(144 16 16)" />
+          <ellipse cx="16" cy="8.5" rx="4.2" ry="6.5" transform="rotate(216 16 16)" />
+          <ellipse cx="16" cy="8.5" rx="4.2" ry="6.5" transform="rotate(288 16 16)" />
+        </g>
+        <circle cx="16" cy="16" r="3.4" class="logo-core" />
+      </svg>
+      <div class="brand">
+        <strong>bloomScroll</strong>
+        <span id="state-line" class="muted">Loading…</span>
+      </div>
+      <button id="options" class="icon-btn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+        </svg>
+      </button>
+    </header>
+
     <div class="modes" role="radiogroup" aria-label="Focus mode">
       <button data-mode="work" role="radio">Work</button>
       <button data-mode="learn" role="radio">Learn</button>
@@ -14,9 +36,27 @@
       <button data-mode="off" role="radio">Off</button>
     </div>
     <p id="mode-hint" class="hint"></p>
-    <section id="stats" class="stats"></section>
-    <p id="warning" class="warning" hidden></p>
-    <p id="backend" class="backend"></p>
+
+    <section class="card" id="tab-card" aria-live="polite">
+      <div class="card-title">This tab</div>
+      <div id="tab-body"></div>
+    </section>
+
+    <section class="card row" id="model-card" hidden>
+      <span id="model-dot" class="dot"></span>
+      <span id="model-text" class="grow"></span>
+      <button id="model-fix" class="link-btn" hidden>Fix</button>
+    </section>
+
+    <section class="toggles" aria-label="Quick settings">
+      <label class="toggle"><span><b>Hide Shorts</b><small id="shorts-note"></small></span><input type="checkbox" id="hideShorts" role="switch" /></label>
+      <label class="toggle"><span><b>Hide comments</b></span><input type="checkbox" id="hideComments" role="switch" /></label>
+      <label class="toggle"><span><b>Hide end-screen suggestions</b></span><input type="checkbox" id="hideEndscreen" role="switch" /></label>
+      <label class="toggle"><span><b>Vanish animation</b><small>Off-topic videos dissolve away</small></span><input type="checkbox" id="animations" role="switch" /></label>
+      <label class="toggle"><span><b>Debug overlay</b><small>Timings and stages, bottom left of YouTube</small></span><input type="checkbox" id="debug" role="switch" /></label>
+    </section>
+
+    <footer id="privacy" class="muted"></footer>
     <script type="module" src="./popup.ts"></script>
   </body>
 </html>

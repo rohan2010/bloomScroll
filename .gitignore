@@ -36,6 +36,10 @@ exports/
 # Save them as *.raw.html, scrub, then commit the scrubbed copy (see tests/fixtures/README.md).
 tests/fixtures/*.raw.html
 
+# Bundled at build time by extension/scripts/prepare-assets.mjs (~44 MB)
+extension/public/models/
+extension/public/ort/
+
 # Model weights and checkpoints (downloaded from Hugging Face, ~800 MB+)
 server/models/
 server/checkpoints/
@@ -57,3 +61,6 @@ playwright-report/
 
 # Private planning doc, kept local
 bloomScroll — Build Spec.md
+
+# README asset capture scratch (tests/e2e/readme-assets.spec.ts)
+docs/assets/.frames/

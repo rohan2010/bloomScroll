@@ -1,92 +1,141 @@
-import type { StatsResponse } from "../shared/messages";
-import type { Mode } from "../shared/types";
-import { loadSettings, modeUsesModel, updateSettings } from "../shared/settings";
+import type { BackendStatus, StatsResponse, StatusRequest } from "../shared/messages";
+import type { Mode, Settings } from "../shared/types";
+import { loadSettings, modeUsesModel, onSettingsChanged, updateSettings } from "../shared/settings";
 
 const HINTS: Record<Mode, string> = {
   work: "Tech topics and allowlisted channels only. Shorts hidden.",
   learn: "Tech plus your own topics. Shorts hidden.",
   relax: "Everything except blocklisted channels.",
-  off: "No filtering, UI cleanup only.",
+  off: "No filtering, just the cleanup switches below.",
 };
 
-const buttons = [...document.querySelectorAll<HTMLButtonElement>("[data-mode]")];
+const MODE_NAME: Record<Mode, string> = { work: "Work", learn: "Learn", relax: "Relax", off: "Off" };
 
-function renderMode(mode: Mode): void {
-  for (const b of buttons) b.setAttribute("aria-checked", String(b.dataset.mode === mode));
-  document.getElementById("mode-hint")!.textContent = HINTS[mode];
+const BACKEND_NAME: Record<string, string> = { laya: "Local Laya", openjev: "Local server", jev: "Jev (TypeSafe)" };
+
+const CLOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-mode]")];
+const SWITCHES = ["hideShorts", "hideComments", "hideEndscreen", "animations", "debug"] as const;
+
+function formatMs(ms: number | undefined): string {
+  if (ms === undefined) return "–";
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
-async function renderStats(): Promise<void> {
-  const box = document.getElementById("stats")!;
-  const warning = document.getElementById("warning")!;
+function renderSettings(s: Settings): void {
+  for (const b of modeButtons) b.setAttribute("aria-checked", String(b.dataset.mode === s.mode));
+  $("mode-hint").textContent = HINTS[s.mode];
+  $("state-line").textContent = s.mode === "off" ? "Filtering paused" : `Filtering · ${MODE_NAME[s.mode]} mode`;
+
+  for (const id of SWITCHES) $<HTMLInputElement>(id).checked = s[id];
+  // Work and Learn always hide Shorts; the switch only applies to Relax and Off.
+  const locked = modeUsesModel(s.mode);
+  const shorts = $<HTMLInputElement>("hideShorts");
+  shorts.disabled = locked;
+  if (locked) shorts.checked = true;
+  $("shorts-note").textContent = locked ? `Always hidden in ${MODE_NAME[s.mode]}` : "";
+
+  $("privacy").textContent =
+    s.backend.kind === "jev" && modeUsesModel(s.mode)
+      ? "Unclear titles are sent to TypeSafe (Jev) with your key."
+      : "Runs on this computer. Nothing leaves it.";
+}
+
+async function activeTabStats(): Promise<StatsResponse | undefined> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  let stats: StatsResponse | undefined;
+  if (tab?.id === undefined) return undefined;
   try {
-    if (tab?.id !== undefined) stats = await chrome.tabs.sendMessage(tab.id, { type: "stats" });
+    return await chrome.tabs.sendMessage(tab.id, { type: "stats" });
   } catch {
-    // Not a YouTube tab, or the page was open before the extension loaded.
+    return undefined; // not a YouTube tab, or the tab was open before the extension loaded
   }
+}
+
+async function renderTab(): Promise<void> {
+  const body = $("tab-body");
+  const stats = await activeTabStats();
   if (!stats) {
-    box.innerHTML = `<div class="note">Open YouTube to see what's filtered.</div>`;
-    warning.hidden = true;
+    body.innerHTML = `<div class="note">Open YouTube to see what's filtered here. If YouTube is already open, reload the tab.</div>`;
     return;
   }
   if (!stats.surface || stats.mode === "off") {
-    box.innerHTML = `<div class="note">${stats.mode === "off" ? "Filtering is off." : "This page isn't filtered (home, search and watch pages are)."}</div>`;
-    warning.hidden = true;
+    body.innerHTML = `<div class="note">${stats.mode === "off" ? "Filtering is off." : "This page isn't filtered. Home, search and watch pages are."}</div>`;
     return;
   }
-  box.innerHTML = `
-    <div><b>${stats.found}</b><span>tiles</span></div>
-    <div><b>${stats.hidden}</b><span>hidden</span></div>
-    <div><b>${stats.pending}</b><span>pending</span></div>`;
-  warning.hidden = stats.found > 0;
-  warning.textContent = "0 tiles found on this page. YouTube may have changed its layout. Please open a \"selector broke\" issue.";
+  const t = stats.timing;
+  const timing = stats.pending || stats.queue
+    ? `Classifying… ${stats.pending} left`
+    : t.settledMs !== undefined
+      ? `Settled in ${formatMs(t.settledMs)} · instant answers ${formatMs(t.fastP50)}${t.modelP50 !== undefined ? ` · model ${formatMs(t.modelP50)}` : ""}`
+      : "Waiting for videos";
+  body.innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${stats.shown}</b><span>shown</span></div>
+      <div class="stat hidden"><b>${stats.hidden}</b><span>hidden</span></div>
+      <div class="stat"><b>${stats.pending}</b><span>pending</span></div>
+    </div>
+    <div class="timing">${CLOCK}<span></span></div>
+    ${stats.found === 0 ? `<div class="warning">No video tiles found on this page. YouTube may have changed its layout: please open a "selector broke" issue.</div>` : ""}`;
+  body.querySelector(".timing span")!.textContent = timing;
 }
 
-/** Shows whether the model backend is reachable, since without it only rules filter. */
-async function renderBackend(): Promise<void> {
-  const el = document.getElementById("backend")!;
-  const s = await loadSettings();
-  const set = (text: string, bad: boolean) => {
-    el.textContent = text;
-    el.classList.toggle("bad", bad);
+async function renderModel(s: Settings): Promise<void> {
+  const card = $("model-card");
+  card.hidden = !modeUsesModel(s.mode);
+  if (card.hidden) return;
+  const name = BACKEND_NAME[s.backend.kind] ?? s.backend.kind;
+  $("model-text").textContent = `${name}: checking…`;
+  let st: BackendStatus | undefined;
+  try {
+    st = await chrome.runtime.sendMessage({ type: "status" } satisfies StatusRequest);
+  } catch {
+    st = undefined;
+  }
+  const dot = $("model-dot");
+  const fix = $<HTMLButtonElement>("model-fix");
+  const text: Record<BackendStatus["state"], string> = {
+    connected: `${name} connected${st?.latencyMs !== undefined ? ` · ${Math.round(st.latencyMs)} ms` : ""}`,
+    down: `${name} isn't running. Start server/start.sh.`,
+    "no-permission": `${name} not allowed yet.`,
+    "invalid-url": `${name} URL is invalid.`,
+    unused: "",
   };
-  if (!modeUsesModel(s.mode)) return set("", false);
-  let origin: string;
-  try {
-    origin = new URL(s.backend.url).origin;
-  } catch {
-    return set("Model: backend URL is invalid. Fix it in Settings.", true);
-  }
-  if (!(await chrome.permissions.contains({ origins: [`${origin}/*`] }))) {
-    return set("Model: not allowed yet. Open Settings and click Save, then Allow.", true);
-  }
-  if (s.backend.kind === "jev") return set(`Model: Jev at ${origin}`, false);
-  try {
-    const res = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(2000) });
-    if (!res.ok) throw new Error(String(res.status));
-    set(`Model: ${s.backend.kind} connected (${origin})`, false);
-  } catch {
-    set(`Model: not running at ${origin}. Start it with server/start.sh. Until then only rules filter.`, true);
-  }
+  dot.className = `dot ${st?.state === "connected" ? "ok" : "bad"}`;
+  $("model-text").textContent = st ? text[st.state] : `${name}: unknown`;
+  // Rules and embeddings still work without a model, so say so rather than alarm.
+  if (st && st.state !== "connected") $("model-text").textContent += " Rules and embeddings still filter.";
+  fix.hidden = !st || st.state === "connected" || st.state === "down";
 }
 
-for (const b of buttons) {
-  b.addEventListener("click", async () => {
-    const mode = b.dataset.mode as Mode;
-    renderMode(mode);
-    await updateSettings({ mode });
-    setTimeout(renderStats, 400);
-    renderBackend();
-  });
+async function main(): Promise<void> {
+  let s = await loadSettings();
+  renderSettings(s);
+  renderTab();
+  renderModel(s);
+
+  for (const b of modeButtons) {
+    b.addEventListener("click", async () => {
+      s = await updateSettings({ mode: b.dataset.mode as Mode });
+      renderSettings(s);
+      renderModel(s);
+      setTimeout(renderTab, 400);
+    });
+  }
+  for (const id of SWITCHES) {
+    $<HTMLInputElement>(id).addEventListener("change", async (e) => {
+      s = await updateSettings({ [id]: (e.target as HTMLInputElement).checked });
+      renderSettings(s);
+    });
+  }
+  const openOptions = () => chrome.runtime.openOptionsPage();
+  $("options").addEventListener("click", openOptions);
+  $("model-fix").addEventListener("click", openOptions);
+  onSettingsChanged((next) => renderSettings((s = next)));
+
+  // Keep the tab numbers live while the popup is open.
+  setInterval(renderTab, 1000);
 }
 
-document.getElementById("options")!.addEventListener("click", (e) => {
-  e.preventDefault();
-  chrome.runtime.openOptionsPage();
-});
-
-loadSettings().then((s) => renderMode(s.mode));
-renderStats();
-renderBackend();
+main();

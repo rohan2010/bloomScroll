@@ -1,0 +1,516 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>bloomScroll how it works</title>
+<style>
+  html, body { margin: 0; background: #0f0f0f; }
+  canvas { display: block; width: 960px; height: 600px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// Motion graphic for the README: a pure function render(t) of time in seconds, so every frame is
+// reproducible. Exported frame by frame by render-gif.cjs. Effect logic mirrors
+// extension/src/content/dither.ts (ordered-dither dissolve) and hide.ts (glitch, collapse).
+
+const W = 960, H = 600, SCALE = 2, DURATION = 12;
+const canvas = document.getElementById("c");
+canvas.width = W * SCALE;
+canvas.height = H * SCALE;
+const ctx = canvas.getContext("2d");
+const FONT = '-apple-system, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif';
+
+const C = {
+  bg: "#0f0f0f", card: "#1a1a1a", fg: "#f1f1f1", muted: "#a3a3a3", line: "rgba(255,255,255,0.09)",
+  rule: "#7c5cff", embed: "#0b8bd9", model: "#d97706", show: "#3ec27e", hide: "#ff6b5e", accent: "#3ec27e",
+};
+const STAGE = {
+  rule: { color: C.rule, label: "rule" },
+  embed: { color: C.embed, label: "mini model" },
+  model: { color: C.model, label: "Laya" },
+};
+
+// ---------------------------------------------------------------- timeline helpers
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const smooth = (x) => x * x * (3 - 2 * x);
+const lerp = (a, b, x) => a + (b - a) * x;
+
+// ---------------------------------------------------------------- the feed
+// on: what the user came for. stage: who decides. at: when the verdict lands. die: when an off-topic
+// tile starts being destroyed.
+const TILES = [
+  { title: "Rust ownership in 10 minutes", channel: "Let's Get Rusty", dur: "10:42", hue: 210, on: true, stage: "rule", at: 2.15, why: "title mentions “Rust”" },
+  { title: "Funniest cat fails compilation", channel: "Daily Dose", dur: "8:03", hue: 25, on: false, stage: "embed", at: 3.45, why: "closer to comedy", die: 6.6 },
+  { title: "SQL joins in 6 minutes", channel: "Web Dev Simplified", dur: "6:12", hue: 175, on: true, stage: "embed", at: 3.2, why: "close to “databases”" },
+  { title: "I survived 100 days in Minecraft hardcore", channel: "GamerGuy", dur: "41:20", hue: 110, on: false, stage: "model", at: 6.0, why: "Laya: off-topic · gaming", die: 6.9, scan: [5.3, 6.0] },
+  { title: "Attention is all you need, paper walkthrough", channel: "Yannic Kilcher", dur: "27:05", hue: 265, on: true, stage: "model", at: 5.2, why: "Laya: on-topic", scan: [4.5, 5.2] },
+  { title: "How the Linux kernel boots", channel: "Low Level", dur: "25:00", hue: 45, on: true, stage: "rule", at: 2.4, why: "title mentions “Linux”" },
+  { title: "Gordon Ramsay makes the perfect steak", channel: "Gordon Ramsay", dur: "12:31", hue: 0, on: false, stage: "embed", at: 3.7, why: "closer to food", die: 6.75 },
+  { title: "Dijkstra's algorithm visualized", channel: "Reducible", dur: "9:48", hue: 320, on: true, stage: "embed", at: 3.95, why: "close to “algorithms”" },
+];
+TILES.forEach((t, i) => (t.seed = 9137 * (i + 1)));
+const SURVIVORS = TILES.filter((t) => t.on);
+
+const GRID = { x: 24, y: 152, cols: 4, gap: 16, w: (W - 48 - 3 * 16) / 4, thumbH: 122, h: 184 };
+function slot(i) {
+  return { x: GRID.x + (i % GRID.cols) * (GRID.w + GRID.gap), y: GRID.y + Math.floor(i / GRID.cols) * (GRID.h + GRID.gap) };
+}
+
+const GLITCH = 0.18, DISSOLVE = 0.8, COLLAPSE_AT = 7.95, COLLAPSE = 0.55;
+
+// ---------------------------------------------------------------- drawing primitives
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+}
+function text(s, x, y, size, weight = 400, color = C.fg, align = "left") {
+  ctx.font = `${weight} ${size}px ${FONT}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(s, x, y);
+}
+function wrap(s, maxW, size, weight) {
+  ctx.font = `${weight} ${size}px ${FONT}`;
+  const words = s.split(" ");
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width > maxW && line) {
+      lines.push(line);
+      line = w;
+    } else line = next;
+  }
+  lines.push(line);
+  if (lines.length > 2) {
+    lines.length = 2;
+    lines[1] = lines[1].replace(/\s*\S*$/, "") + "…";
+  }
+  return lines;
+}
+function pill(x, y, label, color, size = 11, filled = true) {
+  ctx.font = `600 ${size}px ${FONT}`;
+  const w = ctx.measureText(label).width + 14;
+  rr(x, y, w, size + 9, (size + 9) / 2);
+  if (filled) {
+    ctx.fillStyle = color;
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  text(label, x + 7, y + size + 3, size, 600, filled ? "#0f0f0f" : color);
+  return w;
+}
+
+function logo(cx, cy, r, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = C.accent;
+  for (let k = 0; k < 5; k++) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((k * 72 * Math.PI) / 180);
+    ctx.beginPath();
+    ctx.ellipse(0, -r * 0.47, r * 0.26, r * 0.41, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = C.bg;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.21, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- tile
+function thumbnail(tile, x, y, w, h) {
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, `hsl(${tile.hue} 55% 52%)`);
+  g.addColorStop(1, `hsl(${(tile.hue + 40) % 360} 60% 32%)`);
+  rr(x, y, w, h, 12);
+  ctx.fillStyle = g;
+  ctx.fill();
+  // soft shapes so thumbnails don't look like flat swatches
+  ctx.save();
+  rr(x, y, w, h, 12);
+  ctx.clip();
+  const base = ctx.globalAlpha; // multiply, so scene fades still apply
+  ctx.globalAlpha = base * 0.16;
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(x + w * 0.78, y + h * 0.28, h * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = base * 0.1;
+  ctx.beginPath();
+  ctx.arc(x + w * 0.2, y + h * 0.95, h * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // duration badge
+  ctx.font = `600 11px ${FONT}`;
+  const dw = ctx.measureText(tile.dur).width + 10;
+  rr(x + w - dw - 6, y + h - 22, dw, 16, 4);
+  ctx.fillStyle = "rgba(0,0,0,0.78)";
+  ctx.fill();
+  text(tile.dur, x + w - dw - 1, y + h - 10, 11, 600, "#fff");
+}
+
+function drawTile(tile, x, y, t, opts = {}) {
+  const { w, thumbH } = GRID;
+  thumbnail(tile, x, y, w, thumbH);
+  const lines = wrap(tile.title, w - 4, 13, 600);
+  lines.forEach((l, k) => text(l, x, y + thumbH + 19 + k * 17, 13, 600, C.fg));
+  text(tile.channel, x, y + thumbH + 19 + lines.length * 17 + 2, 12, 400, C.muted);
+
+  const decided = t >= tile.at;
+  const st = STAGE[tile.stage];
+
+  // Laya working on this tile: amber progress bar along the thumbnail bottom
+  if (tile.scan && t >= tile.scan[0] && t < tile.at) {
+    const p = prog(t, tile.scan[0], tile.scan[1]);
+    rr(x, y, w, thumbH, 12);
+    ctx.strokeStyle = C.model;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    rr(x + 10, y + thumbH - 34, w - 20, 6, 3);
+    ctx.fill();
+    ctx.fillStyle = C.model;
+    rr(x + 10, y + thumbH - 34, (w - 20) * easeInOut(p), 6, 3);
+    ctx.fill();
+    text("Laya is reading the title…", x + 10, y + thumbH - 42, 11, 600, "#fff");
+  }
+
+  if (!decided || opts.noBadges) return;
+  const a = easeOut(prog(t, tile.at, tile.at + 0.25));
+  ctx.save();
+  ctx.globalAlpha *= a;
+  // decision outline in the stage colour
+  rr(x, y, w, thumbH, 12);
+  ctx.strokeStyle = st.color;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // stage pill
+  pill(x + 8, y + 8, st.label, st.color);
+  // verdict mark
+  const mx = x + w - 18, my = y + 18;
+  ctx.fillStyle = tile.on ? C.show : C.hide;
+  ctx.beginPath();
+  ctx.arc(mx, my, 11 * (0.6 + 0.4 * a), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#0f0f0f";
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  if (tile.on) {
+    ctx.moveTo(mx - 4.5, my);
+    ctx.lineTo(mx - 1, my + 3.5);
+    ctx.lineTo(mx + 5, my - 3.5);
+  } else {
+    ctx.moveTo(mx - 4, my - 4);
+    ctx.lineTo(mx + 4, my + 4);
+    ctx.moveTo(mx + 4, my - 4);
+    ctx.lineTo(mx - 4, my + 4);
+  }
+  ctx.stroke();
+  // reason strip
+  ctx.fillStyle = "rgba(0,0,0,0.62)";
+  ctx.save();
+  rr(x, y, w, thumbH, 12);
+  ctx.clip();
+  ctx.fillRect(x, y + thumbH - 30, w, 30);
+  ctx.restore();
+  text(tile.why, x + 10, y + thumbH - 11, 12, 500, "#fff");
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- the destroy effect (dither.ts)
+const BAYER8 = [0, 48, 12, 60, 3, 51, 15, 63, 32, 16, 44, 28, 35, 19, 47, 31, 8, 56, 4, 52, 11, 59, 7, 55, 40, 24, 36, 20, 43, 27, 39, 23, 2, 50, 14, 62, 1, 49, 13, 61, 34, 18, 46, 30, 33, 17, 45, 29, 10, 58, 6, 54, 9, 57, 5, 53, 42, 26, 38, 22, 41, 25, 37, 21];
+function hash(i, j, seed) {
+  let h = (i * 374761393 + j * 668265263 + seed * 2246822519) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function threshold(i, j, rows, seed) {
+  const bayer = (BAYER8[(j % 8) * 8 + (i % 8)] + 0.5) / 64;
+  const sweep = rows > 1 ? j / (rows - 1) : 0;
+  return 0.45 * bayer + 0.25 * hash(i, j, seed) + 0.3 * sweep;
+}
+const CELL = 5, EDGE = 0.1;
+
+function drawDying(tile, x, y, t) {
+  const { w, h } = GRID;
+  const gp = prog(t, tile.die, tile.die + GLITCH);
+  // glitch: steps(4) jitter + desaturate, like hide.ts
+  const step = Math.min(3, Math.floor(gp * 4));
+  const jitter = [[0, 0], [-2, 1], [2, -1], [0, 0]][step];
+  ctx.save();
+  if (t >= tile.die) ctx.filter = step === 0 ? "saturate(0.6) contrast(1.2)" : step === 1 ? "saturate(0.2) contrast(1.6)" : step === 2 ? "saturate(0) contrast(1.8) hue-rotate(40deg)" : "saturate(0) contrast(1.4)";
+  drawTile(tile, x + jitter[0], y + jitter[1], t);
+  ctx.restore();
+
+  const p = prog(t, tile.die + GLITCH * 0.5, tile.die + GLITCH * 0.5 + DISSOLVE);
+  if (p <= 0) return;
+  const cols = Math.ceil(w / CELL), rows = Math.ceil(h / CELL);
+  const front = smooth(p) * (1 + EDGE);
+  const gone = new Path2D(), burning = new Path2D();
+  for (let j = 0; j < rows; j++)
+    for (let i = 0; i < cols; i++) {
+      const th = threshold(i, j, rows, tile.seed);
+      if (th < front - EDGE) gone.rect(x + i * CELL, y + j * CELL, CELL, CELL);
+      else if (th < front) burning.rect(x + i * CELL, y + j * CELL, CELL, CELL);
+    }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - 4, y - 4, w + 8, h + 8);
+  ctx.clip();
+  ctx.fillStyle = C.bg;
+  ctx.fill(gone);
+  ctx.fillStyle = "rgba(241,241,241,0.7)";
+  ctx.fill(burning);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- pipeline gates
+const GATES = [
+  { key: "rule", n: "1", title: "Rules", sub: "instant", from: 1.8, to: 2.7 },
+  { key: "embed", n: "2", title: "Mini model", sub: "on your device · milliseconds", from: 3.0, to: 4.15 },
+  { key: "model", n: "3", title: "Laya", sub: "local AI · only the unclear few", from: 4.4, to: 6.2 },
+];
+function drawGates(t, alpha) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  const y = 72, h = 50, gap = 34;
+  const widths = [178, 270, 296];
+  const total = widths.reduce((a, b) => a + b) + gap * 2;
+  let x = (W - total) / 2;
+  GATES.forEach((g, k) => {
+    const w = widths[k];
+    const color = STAGE[g.key].color;
+    const active = t >= g.from && t < g.to;
+    const done = t >= g.to;
+    const count = TILES.filter((tile) => tile.stage === g.key && t >= tile.at).length;
+    const glow = active ? 0.5 + 0.5 * Math.sin((t - g.from) * 7) : 0;
+    rr(x, y, w, h, 14);
+    ctx.fillStyle = C.card;
+    ctx.fill();
+    if (active) {
+      ctx.save();
+      ctx.globalAlpha *= 0.16 + 0.1 * glow;
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.strokeStyle = active || done ? color : C.line;
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.stroke();
+    // number disc
+    ctx.fillStyle = active || done ? color : "#333";
+    ctx.beginPath();
+    ctx.arc(x + 25, y + h / 2, 12, 0, Math.PI * 2);
+    ctx.fill();
+    text(g.n, x + 25, y + h / 2 + 4.5, 13, 700, active || done ? "#0f0f0f" : C.muted, "center");
+    text(g.title, x + 46, y + 22, 14, 650, C.fg);
+    text(g.sub, x + 46, y + 39, 11.5, 400, C.muted);
+    // decided counter
+    if (count) {
+      ctx.font = `700 12px ${FONT}`;
+      const label = `${count} decided`;
+      const cw = ctx.measureText(label).width + 14;
+      rr(x + w - cw - 10, y - 9, cw, 18, 9);
+      ctx.fillStyle = color;
+      ctx.fill();
+      text(label, x + w - cw - 3, y + 4, 11, 700, "#0f0f0f");
+    }
+    // arrow to the next gate
+    if (k < GATES.length - 1) {
+      const ax = x + w + 8, ay = y + h / 2;
+      ctx.strokeStyle = done ? STAGE[GATES[k + 1].key].color : "#3a3a3a";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax + gap - 16, ay);
+      ctx.moveTo(ax + gap - 21, ay - 5);
+      ctx.lineTo(ax + gap - 16, ay);
+      ctx.lineTo(ax + gap - 21, ay + 5);
+      ctx.stroke();
+    }
+    x += w + gap;
+  });
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- captions
+const CAPTIONS = [
+  [0.4, 1.8, "Your YouTube feed. You came for programming, Linux and AI."],
+  [1.8, 3.0, "① Rules catch the obvious ones instantly."],
+  [3.0, 4.4, "② A mini model on your computer sorts most of the rest in milliseconds."],
+  [4.4, 6.45, "③ Laya, a local AI model, reads only the few that are still unclear."],
+  [6.45, 8.85, "Off-topic videos are removed. What you came for stays."],
+];
+function drawCaption(t) {
+  for (const [a, b, s] of CAPTIONS) {
+    const alpha = Math.min(prog(t, a, a + 0.25), 1 - prog(t, b - 0.2, b));
+    if (alpha <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    const dy = (1 - easeOut(prog(t, a, a + 0.3))) * 8;
+    text(s, W / 2, 576 + dy, 15, 500, C.fg, "center");
+    ctx.restore();
+  }
+}
+
+// ---------------------------------------------------------------- header
+function drawHeader(t, alpha) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  logo(42, 34, 22);
+  text("bloomScroll", 64, 40, 18, 700, C.fg);
+  // intent chip
+  const a = easeOut(prog(t, 0.25, 0.85));
+  ctx.globalAlpha *= a;
+  const label = "programming · Linux · AI";
+  ctx.font = `600 13px ${FONT}`;
+  const lw = ctx.measureText(label).width;
+  ctx.font = `400 13px ${FONT}`;
+  const pw = ctx.measureText("Your intent").width;
+  const w = pw + lw + 40;
+  const x = W - 24 - w + (1 - a) * 20, y = 20;
+  rr(x, y, w, 30, 15);
+  ctx.fillStyle = "rgba(62,194,126,0.12)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(62,194,126,0.45)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  text("Your intent", x + 14, y + 20, 13, 400, C.muted);
+  text(label, x + 26 + pw, y + 20, 13, 600, C.accent);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- end card
+function drawEnd(t) {
+  const a = easeOut(prog(t, 9.05, 9.6));
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= a;
+  const cy = 215 - (1 - a) * 12;
+  logo(W / 2, cy, 44 + 6 * easeOut(prog(t, 9.05, 9.9)));
+  text("bloomScroll", W / 2, cy + 86, 38, 750, C.fg, "center");
+  text("Keeps YouTube on what you came for.", W / 2, cy + 118, 17, 400, C.muted, "center");
+  const chips = ["35 of 40 decided on your device", "Feed settled in ~1.5 s", "Nothing leaves your computer"];
+  ctx.font = `600 15px ${FONT}`;
+  const widths = chips.map((s) => ctx.measureText(s).width + 32);
+  const total = widths.reduce((s, w) => s + w, 0) + 14 * (chips.length - 1);
+  let x = (W - total) / 2;
+  chips.forEach((s, k) => {
+    const ca = easeOut(prog(t, 9.5 + k * 0.22, 9.85 + k * 0.22));
+    ctx.save();
+    ctx.globalAlpha *= ca;
+    const y = cy + 152 + (1 - ca) * 10;
+    rr(x, y, widths[k], 38, 19);
+    ctx.fillStyle = k === 2 ? "rgba(62,194,126,0.14)" : C.card;
+    ctx.fill();
+    ctx.strokeStyle = k === 2 ? "rgba(62,194,126,0.5)" : C.line;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    text(s, x + widths[k] / 2, y + 24.5, 15, 600, k === 2 ? C.accent : C.fg, "center");
+    ctx.restore();
+    x += widths[k] + 14;
+  });
+  const fa = prog(t, 10.3, 10.7);
+  ctx.globalAlpha *= fa;
+  text("Measured in Chrome on a 2017 Intel MacBook Pro, 40-video test feed, models warm. Open source, MIT.", W / 2, cy + 236, 12.5, 400, "#7a7a7a", "center");
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- frame
+function render(t) {
+  ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  ctx.filter = "none";
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const sceneOut = 1 - easeInOut(prog(t, 8.85, 9.2)); // feed scene fades for the end card
+  ctx.save();
+  ctx.globalAlpha = sceneOut;
+  drawHeader(t, 1);
+  drawGates(t, easeOut(prog(t, 1.3, 1.8)));
+
+  // tiles: appear, get decided, the off-topic ones are destroyed, survivors slide together in reading
+  // order (staggered, slightly lifted) so moving tiles pass over the others cleanly
+  const order = TILES.map((tile, i) => i).sort((a, b) => {
+    const moving = (i) => TILES[i].on && SURVIVORS.indexOf(TILES[i]) !== i;
+    return Number(moving(a)) - Number(moving(b)) || a - b;
+  });
+  order.forEach((i) => {
+    const tile = TILES[i];
+    const k = Math.max(0, SURVIVORS.indexOf(tile));
+    const start = COLLAPSE_AT + k * 0.08;
+    const collapse = easeInOut(prog(t, start, start + COLLAPSE));
+    const lift = Math.sin(Math.PI * collapse);
+    const appear = easeOut(prog(t, 0.3 + i * 0.07, 0.75 + i * 0.07));
+    if (appear <= 0) return;
+    if (!tile.on && t >= tile.die + GLITCH * 0.5 + DISSOLVE) return; // destroyed
+    const from = slot(i);
+    const to = tile.on ? slot(SURVIVORS.indexOf(tile)) : from;
+    const x = lerp(from.x, to.x, collapse);
+    const y = lerp(from.y, to.y, collapse) + (1 - appear) * 14;
+    ctx.save();
+    ctx.globalAlpha *= appear;
+    if (lift > 0.01 && to !== from) {
+      // lifted while moving: a soft shadow and a hair smaller
+      const sc = 1 - 0.04 * lift;
+      ctx.translate(x + GRID.w / 2, y + GRID.h / 2);
+      ctx.scale(sc, sc);
+      ctx.translate(-(x + GRID.w / 2), -(y + GRID.h / 2));
+      ctx.shadowColor = `rgba(0,0,0,${0.55 * lift})`;
+      ctx.shadowBlur = 24 * lift;
+      ctx.shadowOffsetY = 8 * lift;
+      rr(x, y, GRID.w, GRID.thumbH, 12);
+      ctx.fillStyle = C.bg;
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      // backdrop so the tile's text stays readable over whatever it passes
+      rr(x - 6, y - 6, GRID.w + 12, GRID.h + 6, 14);
+      ctx.fillStyle = `rgba(15,15,15,${0.92 * lift})`;
+      ctx.fill();
+    }
+    if (!tile.on && t >= tile.die) drawDying(tile, x, y, t);
+    else drawTile(tile, x, y, t);
+    ctx.restore();
+  });
+  drawCaption(t);
+  ctx.restore();
+
+  drawEnd(t);
+
+  // loop: fade in from black, fade out to black
+  const fade = Math.max(1 - prog(t, 0, 0.35), prog(t, DURATION - 0.4, DURATION));
+  if (fade > 0) {
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+}
+
+window.render = render;
+window.frame = (t) => {
+  render(t);
+  return canvas.toDataURL("image/png");
+};
+window.DURATION = DURATION;
+render(Number(new URLSearchParams(location.search).get("t") ?? 5));
+</script>
+</body>
+</html>

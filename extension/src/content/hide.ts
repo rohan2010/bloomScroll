@@ -1,6 +1,7 @@
-import type { Decision, Settings, VideoTile } from "../shared/types";
+import type { Decision, Settings } from "../shared/types";
 import { effectiveHideShorts } from "../shared/settings";
 import { COMMENTS_UI, ENDSCREEN_UI, SHORTS_UI } from "./selectors";
+import { ditherLayer } from "./dither";
 
 export const PENDING = "bloom-pending";
 export const HIDDEN = "bloom-hidden";
@@ -11,13 +12,25 @@ function scoped(attr: string, selectors: string[]): string {
   return `${selectors.map((s) => `html[${attr}] ${s}`).join(",\n")} { display: none !important; }`;
 }
 
+const STAGE_OUTLINES: Record<string, string> = {
+  rule: "#7c5cff",
+  embedding: "#0b8bd9",
+  model: "#d97706",
+  fallback: "#8a8a8a",
+};
+
 export function injectStyles(doc: Document = document): void {
   if (doc.getElementById(STYLE_ID)) return;
   const style = doc.createElement("style");
   style.id = STYLE_ID;
   style.textContent = [
-    `.${PENDING} { opacity: 0.15 !important; transition: opacity 120ms ease; }`,
+    // Waiting tiles look untouched; off-topic ones are dithered away once decided.
     `.${HIDDEN} { display: none !important; }`,
+    // Debug: outline each tile by the stage that decided it.
+    ...Object.entries(STAGE_OUTLINES).map(
+      ([stage, color]) => `html[data-bloom-debug] [data-bloom-stage="${stage}"] { outline: 2px solid ${color}; outline-offset: -2px; border-radius: 12px; }`,
+    ),
+    `html[data-bloom-debug] .${PENDING} { outline: 2px dashed #8a8a8a; outline-offset: -2px; border-radius: 12px; }`,
     scoped("data-bloom-shorts", SHORTS_UI),
     scoped("data-bloom-comments", COMMENTS_UI),
     scoped("data-bloom-endscreen", ENDSCREEN_UI),
@@ -25,110 +38,129 @@ export function injectStyles(doc: Document = document): void {
   (doc.head ?? doc.documentElement).appendChild(style);
 }
 
+export function reducedMotion(): boolean {
+  return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+export function animationsOn(s: Settings): boolean {
+  return s.animations && !reducedMotion();
+}
+
 export function applyUiToggles(s: Settings, doc: Document = document): void {
   const html = doc.documentElement;
   html.toggleAttribute("data-bloom-shorts", effectiveHideShorts(s));
   html.toggleAttribute("data-bloom-comments", s.hideComments);
   html.toggleAttribute("data-bloom-endscreen", s.hideEndscreen);
+  html.toggleAttribute("data-bloom-anim", animationsOn(s));
+  html.toggleAttribute("data-bloom-debug", s.debug);
+}
+
+/** Effects in flight per tile, so a recycled or re-decided tile can cancel them. */
+const running = new WeakMap<Element, () => void>();
+
+function cancelAnimations(el: Element): void {
+  running.get(el)?.();
+  running.delete(el);
+  const h = el as HTMLElement;
+  h.style.visibility = "";
+  h.style.overflow = "";
+  el.removeAttribute("data-bloom-fx");
+}
+
+function onScreen(el: Element): boolean {
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight;
+}
+
+const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+
+/**
+ * Off-topic exit: a short glitch, then the tile dissolves pixel by pixel (ordered dither, see
+ * dither.ts), then its space collapses so neighbours slide in. Grid tiles (home) collapse
+ * sideways, list tiles (sidebar, search) upward.
+ */
+function destroy(el: HTMLElement): void {
+  const r = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  const sideways = el.tagName === "YTD-RICH-ITEM-RENDERER";
+  const anims: Animation[] = [];
+  const fx = ditherLayer.dissolve(el);
+  let live = true;
+  running.set(el, () => {
+    live = false;
+    fx.cancel();
+    for (const a of anims) a.cancel();
+  });
+  el.setAttribute("data-bloom-fx", "dissolve");
+  anims.push(
+    el.animate(
+      [
+        { transform: "translate(0, 0)", filter: "saturate(1) contrast(1)" },
+        { transform: "translate(-2px, 1px)", filter: "saturate(0.2) contrast(1.6)", offset: 0.25 },
+        { transform: "translate(2px, -1px)", filter: "saturate(0) contrast(1.8) hue-rotate(40deg)", offset: 0.5 },
+        { transform: "translate(0, 0)", filter: "saturate(0) contrast(1.4)" },
+      ],
+      { duration: 180, easing: "steps(4, end)", fill: "forwards" },
+    ),
+  );
+  fx.done
+    .then(() => {
+      if (!live) return;
+      el.style.visibility = "hidden"; // fully covered by the dither layer this frame
+      el.style.overflow = "hidden";
+      const from: Keyframe = { height: `${r.height}px`, marginTop: cs.marginTop, marginBottom: cs.marginBottom };
+      const to: Keyframe = { height: "0px", marginTop: "0px", marginBottom: "0px" };
+      if (sideways) {
+        Object.assign(from, { width: `${r.width}px`, minWidth: "0px", maxWidth: `${r.width}px`, marginLeft: cs.marginLeft, marginRight: cs.marginRight });
+        Object.assign(to, { width: "0px", minWidth: "0px", maxWidth: "0px", marginLeft: "0px", marginRight: "0px" });
+      }
+      const collapse = el.animate([from, to], { duration: 260, easing: EASE, fill: "forwards" });
+      anims.push(collapse);
+      return collapse.finished;
+    })
+    .then(() => {
+      if (!live) return;
+      el.classList.add(HIDDEN);
+      cancelAnimations(el);
+    })
+    .catch(() => {
+      // cancelled: the tile was recycled or re-decided; cancelAnimations already restored it
+    });
 }
 
 export function markPending(el: Element): void {
+  cancelAnimations(el);
   el.classList.add(PENDING);
   el.classList.remove(HIDDEN);
   el.setAttribute("data-bloom", "pending");
+  el.removeAttribute("data-bloom-stage");
 }
 
-export function applyVerdict(el: Element, d: Pick<Decision, "verdict">): void {
+export function applyVerdict(el: Element, d: Pick<Decision, "verdict"> & Partial<Pick<Decision, "stage">>, animate = false): void {
+  cancelAnimations(el);
   el.classList.remove(PENDING);
-  el.classList.toggle(HIDDEN, d.verdict === "hide");
   el.setAttribute("data-bloom", d.verdict);
+  if (d.stage) el.setAttribute("data-bloom-stage", d.stage);
+  else el.removeAttribute("data-bloom-stage");
+  if (d.verdict === "show") {
+    el.classList.remove(HIDDEN);
+    return;
+  }
+  // Off screen there's nothing to watch, so skip straight to hidden.
+  if (animate && el instanceof HTMLElement && onScreen(el)) destroy(el);
+  else el.classList.add(HIDDEN);
 }
 
 /** Return a tile to YouTube's own rendering. Never removes the node: YouTube recycles them. */
 export function clearTile(el: Element): void {
+  cancelAnimations(el);
   el.classList.remove(PENDING, HIDDEN);
   el.removeAttribute("data-bloom");
   el.removeAttribute("data-bloom-id");
+  el.removeAttribute("data-bloom-stage");
 }
 
-export type HiddenEntry = { tile: VideoTile; decision: Decision };
-
-const DRAWER_CSS = `
-:host { all: initial; }
-.wrap { position: fixed; right: 16px; bottom: 16px; z-index: 2147483000; font: 13px/1.4 system-ui, sans-serif; color: #e8e8e8; }
-button { font: inherit; cursor: pointer; }
-.toggle { background: #1f6f43; color: #fff; border: 0; border-radius: 999px; padding: 8px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
-.panel { position: absolute; right: 0; bottom: 44px; width: 360px; max-height: 60vh; overflow: auto; background: #1b1b1b; border: 1px solid #333; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
-.panel[hidden] { display: none; }
-.empty { padding: 14px; color: #aaa; }
-ul { list-style: none; margin: 0; padding: 0; }
-li { padding: 10px 12px; border-bottom: 1px solid #2a2a2a; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
-.title { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.meta { color: #9a9a9a; font-size: 12px; grid-column: 1; }
-.show { grid-row: 1 / span 2; grid-column: 2; align-self: center; background: #2a2a2a; color: #e8e8e8; border: 1px solid #444; border-radius: 6px; padding: 4px 8px; }
-.show:hover { background: #333; }
-`;
-
-/** Floating "Hidden (N)" button listing filtered tiles with their reason. Lives in a shadow root. */
-export class HiddenDrawer {
-  private host: HTMLElement;
-  private toggle: HTMLButtonElement;
-  private panel: HTMLElement;
-  private entries: HiddenEntry[] = [];
-
-  constructor(private onShow: (entry: HiddenEntry) => void, doc: Document = document) {
-    this.host = doc.createElement("bloomscroll-drawer");
-    const root = this.host.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>${DRAWER_CSS}</style><div class="wrap"><div class="panel" hidden></div><button class="toggle"></button></div>`;
-    this.toggle = root.querySelector(".toggle")!;
-    this.panel = root.querySelector(".panel")!;
-    this.toggle.addEventListener("click", () => {
-      this.panel.hidden = !this.panel.hidden;
-      if (!this.panel.hidden) this.renderList();
-    });
-  }
-
-  mount(): void {
-    if (!this.host.isConnected) document.documentElement.appendChild(this.host);
-  }
-
-  setVisible(visible: boolean): void {
-    this.host.style.display = visible ? "" : "none";
-  }
-
-  update(entries: HiddenEntry[]): void {
-    this.entries = entries;
-    this.toggle.textContent = `Hidden (${entries.length})`;
-    if (!this.panel.hidden) this.renderList();
-  }
-
-  private renderList(): void {
-    this.panel.replaceChildren();
-    if (!this.entries.length) {
-      const p = document.createElement("div");
-      p.className = "empty";
-      p.textContent = "Nothing hidden on this page.";
-      this.panel.append(p);
-      return;
-    }
-    const ul = document.createElement("ul");
-    for (const entry of this.entries) {
-      const li = document.createElement("li");
-      const title = document.createElement("div");
-      title.className = "title";
-      title.textContent = entry.tile.title;
-      title.title = entry.tile.title;
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = `${entry.tile.channel || "unknown channel"} · ${entry.decision.reason}`;
-      const show = document.createElement("button");
-      show.className = "show";
-      show.textContent = "👍 Show";
-      show.title = "Show this video and remember that it's on-intent";
-      show.addEventListener("click", () => this.onShow(entry));
-      li.append(title, meta, show);
-      ul.append(li);
-    }
-    this.panel.append(ul);
-  }
+/** Hidden, or on its way out. */
+export function isHidden(el: Element): boolean {
+  return el.getAttribute("data-bloom") === "hide";
 }

@@ -10,4 +10,6 @@ export interface DecisionBackend {
   readonly maxBatch: number;
   /** Each backend frames its own prompt from the user's topics. */
   decide(topics: string[], tiles: VideoTile[], signal?: AbortSignal): Promise<ModelVerdict[]>;
+  /** Optional: page a sleeping local model back into memory before real requests arrive. */
+  warm?(): Promise<void>;
 }

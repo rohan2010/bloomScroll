@@ -45,14 +45,22 @@ cd ../extension && LAYA_URL=http://127.0.0.1:8765 pnpm exec vitest run jevWire  
 
 ## Measured on the 2017 MacBook Pro (i5-7360U, 2 cores)
 
-- About **0.5 s per tile** on CPU (8 tiles ≈ 4 s), with no gain from thread tuning. A full home
-  feed through the model alone takes ~20 s, so the embedding pre-filter and decision cache carry
-  most of the load.
-- Framing matters a lot. One state per video plus one shared question separates tech titles from
-  off-intent ones far better (mean on/off gap 0.38) than putting the intent in the state and each
-  title in a question (gap 0.06). The client uses the first framing.
-- Zero-shot misses remain (a Minecraft title scored 0.76 on-intent), so calibration on your labels
-  matters.
+Laya re-encodes the whole question, options included, for every tile, so cost tracks tokens:
+about 6.5 ms per token, with no per-request overhead and no gain from bigger batches on CPU.
+
+| Prompt | ms per tile | AUC (40 titles) |
+| --- | --- | --- |
+| 30 topics + 8 described off-topic categories | 980 | 1.000 |
+| Short tech summary + 8 category labels (what the extension sends) | 394 | 1.000 |
+| Labels only | 323 | 0.985 |
+
+- **Backends:** ONNX fp32 export was 385 ms/tile (11% faster than PyTorch, identical answers).
+  ONNX int8 was 268 ms/tile but flipped 16 of 40 decisions, so don't use it.
+- **Idle paging:** macOS pages an idle server out of RAM. The first request after a break took
+  7.3 s versus 0.47 s warm, so the extension sends a one-tile warm-up when YouTube opens.
+- **Whole pipeline** (`LAYA_URL=http://127.0.0.1:8765 pnpm exec vitest run pipeline` in
+  `extension/`): on the 40 labeled titles, rules and embeddings decided 35 in 261 ms, Laya the
+  other 5, and the feed was fully settled at 2.7 s with 0 mistakes. Before the audit: ~39 s.
 
 ## CORS
 

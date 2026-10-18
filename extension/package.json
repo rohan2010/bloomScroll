@@ -4,18 +4,25 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
+    "prepare-assets": "node scripts/prepare-assets.mjs",
+    "predev": "node scripts/prepare-assets.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/prepare-assets.mjs",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:selectors": "vitest run extract"
+    "test:selectors": "vitest run extract",
+    "eval:embeddings": "node scripts/eval-embeddings.mjs",
+    "test:e2e": "pnpm build && playwright test"
   },
   "dependencies": {
+    "@huggingface/transformers": "3.7.6",
     "idb": "^8"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "2.0.3",
+    "@playwright/test": "1.48.2",
     "@types/chrome": "^0.0.287",
     "@types/node": "^20",
     "fake-indexeddb": "^6",

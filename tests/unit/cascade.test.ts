@@ -28,6 +28,18 @@ function mockBackend(probs: Record<string, number>, name = "laya"): DecisionBack
   };
 }
 
+/** Embedder whose margin per text is looked up by the text's first word. */
+function marginEmbedder(margins: Record<string, number>, fallback: number): Embedder {
+  return {
+    async score(texts) {
+      return texts.map((t) => {
+        const m = margins[t.split(" ")[0]] ?? fallback;
+        return { topic: "programming", topicSim: 0.3 + m, anchor: "gaming", anchorSim: 0.3 };
+      });
+    },
+  };
+}
+
 function memoryStore(): DecisionStore & { map: Map<string, Decision> } {
   const map = new Map<string, Decision>();
   return {
@@ -74,14 +86,9 @@ describe("rules", () => {
 
 describe("decideBatch", () => {
   it("routes undecided tiles through embeddings, then the model in batches", async () => {
-    const embedder: Embedder = {
-      async maxSimilarity(text) {
-        if (text.startsWith("near")) return { sim: 0.8, topic: "programming" };
-        if (text.startsWith("far")) return { sim: 0.1, topic: "programming" };
-        return { sim: 0.4, topic: "programming" };
-      },
-    };
-    const backend = mockBackend({ m1: 0.9, m2: 0.1, m3: 0.35 }); // modelShow 0.3
+    // margins: near +0.5 (show >= 0.15), far -0.3 (hide <= -0.05), mid +0.05 (unsure)
+    const embedder = marginEmbedder({ near: 0.5, far: -0.3 }, 0.05);
+    const backend = mockBackend({ m1: 0.9, m2: 0.05, m3: 0.15 }); // modelShow 0.1
     const ds = await decideBatch(
       [tile("r", "Linux tips"), tile("near", "near"), tile("far", "far"), tile("m1", "mid1"), tile("m2", "mid2"), tile("m3", "mid3")],
       { settings: settings(), embedder, backend },
@@ -97,9 +104,60 @@ describe("decideBatch", () => {
     expect(backend.calls.map((c) => c.length)).toEqual([2, 1]); // maxBatch 2
   });
 
+  it("decides on the margin between topic and off-topic similarity, not raw similarity", async () => {
+    const embedder: Embedder = {
+      async score(texts) {
+        // Both are 0.6 similar to a topic; only the margin to the off-topic anchor differs.
+        return texts.map((t) =>
+          t.startsWith("game")
+            ? { topic: "programming", topicSim: 0.6, anchor: "gaming", anchorSim: 0.7 }
+            : { topic: "programming", topicSim: 0.6, anchor: "gaming", anchorSim: 0.2 },
+        );
+      },
+    };
+    const ds = await decideBatch([tile("g", "game dev streams"), tile("c", "code review")], { settings: settings(), embedder });
+    expect(ds.map((d) => [d.videoId, d.verdict, d.stage])).toEqual([
+      ["g", "hide", "embedding"],
+      ["c", "show", "embedding"],
+    ]);
+    expect(ds[1].reason).toBe("'programming' 0.60 vs 'gaming' 0.20");
+  });
+
+  it("fast stage answers rules and embeddings without calling the model", async () => {
+    const backend = mockBackend({ mid: 0.9 });
+    const store = memoryStore();
+    const embedder = marginEmbedder({ near: 0.5 }, 0.05);
+    const tiles = [tile("r", "Linux tips"), tile("near", "near"), tile("mid", "mid")];
+    const fast = await decideBatch(tiles, { settings: settings(), embedder, backend, store, stages: "fast" });
+    expect(fast.map((d) => [d.videoId, d.stage])).toEqual([
+      ["r", "rule"],
+      ["near", "embedding"],
+    ]);
+    expect(backend.calls).toHaveLength(0);
+    // The full pass then reuses those cached answers and only asks the model about the rest.
+    const all = await decideBatch(tiles, { settings: settings(), embedder, backend, store });
+    expect(all.map((d) => d.stage)).toEqual(["rule", "embedding", "model"]);
+    expect(backend.calls.flat().map((t) => t.videoId)).toEqual(["mid"]);
+  });
+
+  it("tells the model the short tech summary, plus the user's topics in Learn", async () => {
+    const seen: string[][] = [];
+    const backend: DecisionBackend = { name: "laya", maxBatch: 4, decide: async (topics) => (seen.push(topics), []) };
+    await decideBatch([tile("a", "mystery")], { settings: settings({ mode: "learn", topics: ["woodworking"] }), backend });
+    await decideBatch([tile("b", "mystery")], { settings: settings({ mode: "work", topics: ["woodworking"] }), backend });
+    expect(seen).toEqual([["programming, software, computers, AI", "woodworking"], ["programming, software, computers, AI"]]);
+  });
+
+  it("falls through to the model when the embedder fails", async () => {
+    const embedder: Embedder = { score: vi.fn().mockRejectedValue(new Error("offscreen gone")) };
+    const backend = mockBackend({ a: 0.9 });
+    const [d] = await decideBatch([tile("a", "mystery")], { settings: settings(), embedder, backend });
+    expect(d).toMatchObject({ verdict: "show", stage: "model" });
+  });
+
   it("sends only low-confidence answers to the fallback", async () => {
-    const backend = mockBackend({ sure: 0.95, unsure: 0.33 });
-    const fallback = mockBackend({ unsure: 0.1 }, "jev");
+    const backend = mockBackend({ sure: 0.95, unsure: 0.12 });
+    const fallback = mockBackend({ unsure: 0.02 }, "jev");
     const ds = await decideBatch([tile("sure", "a"), tile("unsure", "b")], { settings: settings(), backend, fallback });
     expect(fallback.calls.flat().map((t) => t.videoId)).toEqual(["unsure"]);
     expect(ds[1]).toMatchObject({ verdict: "hide", stage: "fallback" });

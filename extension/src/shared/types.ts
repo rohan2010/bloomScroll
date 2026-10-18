@@ -41,7 +41,20 @@ export type Settings = {
   hideComments: boolean;
   hideEndscreen: boolean;
   mode: Mode;
+  /** Bottom-left technical overlay on YouTube: timings, stages, recent decisions. */
+  debug: boolean;
+  /** Animate off-intent tiles out instead of removing them instantly. */
+  animations: boolean;
   backend: { url: string; apiKey?: string; kind: BackendKind };
-  /** modelShow: show when the model's P(on-intent) is at least this. */
-  thresholds: { embedShow: number; embedHide: number; modelShow: number; modelMinConf: number };
+  /** Bumped when thresholds change meaning; saved thresholds from another version are reset. */
+  thresholdsVersion?: number;
+  thresholds: {
+    /** Embedding margin (sim to closest topic minus sim to closest off-topic anchor) to show at. */
+    embedMarginShow: number;
+    /** Embedding margin to hide at. Between the two, the tile goes to the model. */
+    embedMarginHide: number;
+    /** Show when the model's P(on-intent) is at least this. */
+    modelShow: number;
+    modelMinConf: number;
+  };
 };

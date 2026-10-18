@@ -1,0 +1,17 @@
+# Python packages for the optional local Laya server (laya-serve), used by bloomScroll's model stage.
+#
+# Which file do I need?
+#   - Apple Silicon Mac (M1/M2/M3/M4), Linux or Windows/WSL  -> this file, requirements.txt
+#   - Intel Mac (2019 or older MacBook/iMac, "Intel" in About This Mac) -> requirements-intel-mac.txt
+# You don't need either if you skip the local server: the extension still filters with rules and
+# its built-in embedding model.
+#
+# Easiest: run ./setup.sh from the repo root, which picks the right file and installs it into
+# server/.venv. By hand (Python 3.10-3.12):
+#   python3 -m venv server/.venv
+#   server/.venv/bin/python -m pip install -r server/requirements.txt
+#
+# laya pulls in torch, transformers, huggingface_hub, tokenizers, safetensors and numpy; the
+# [serve] extra adds the HTTP server (fastapi, uvicorn, python-multipart). On Linux without an
+# NVIDIA GPU, setup.sh installs the much smaller CPU-only torch first.
+laya[serve]==0.4.11

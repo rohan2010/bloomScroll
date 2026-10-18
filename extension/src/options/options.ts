@@ -12,9 +12,10 @@ const lines = (id: string) =>
     .map((l) => l.trim())
     .filter(Boolean);
 
-function num(id: string, fallback: number): number {
-  const v = Number($<HTMLInputElement>(id).value);
-  return Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
+function num(id: string, fallback: number, min = 0, max = 1): number {
+  const raw = $<HTMLInputElement>(id).value.trim();
+  const v = Number(raw);
+  return raw !== "" && Number.isFinite(v) && v >= min && v <= max ? v : fallback;
 }
 
 function fill(s: Settings): void {
@@ -27,8 +28,8 @@ function fill(s: Settings): void {
   $<HTMLSelectElement>("kind").value = s.backend.kind;
   $<HTMLInputElement>("url").value = s.backend.url;
   $<HTMLInputElement>("apiKey").value = s.backend.apiKey ?? "";
-  $<HTMLInputElement>("embedShow").value = String(s.thresholds.embedShow);
-  $<HTMLInputElement>("embedHide").value = String(s.thresholds.embedHide);
+  $<HTMLInputElement>("embedMarginShow").value = String(s.thresholds.embedMarginShow);
+  $<HTMLInputElement>("embedMarginHide").value = String(s.thresholds.embedMarginHide);
   $<HTMLInputElement>("modelShow").value = String(s.thresholds.modelShow);
   $<HTMLInputElement>("modelMinConf").value = String(s.thresholds.modelMinConf);
   syncBackendFields();
@@ -55,8 +56,8 @@ function read(current: Settings): Settings {
     hideEndscreen: $<HTMLInputElement>("hideEndscreen").checked,
     backend: { kind, url, ...(apiKey && kind !== "laya" ? { apiKey } : {}) },
     thresholds: {
-      embedShow: num("embedShow", d.embedShow),
-      embedHide: num("embedHide", d.embedHide),
+      embedMarginShow: num("embedMarginShow", d.embedMarginShow, -1, 1),
+      embedMarginHide: num("embedMarginHide", d.embedMarginHide, -1, 1),
       modelShow: num("modelShow", d.modelShow),
       modelMinConf: num("modelMinConf", d.modelMinConf),
     },

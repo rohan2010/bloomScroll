@@ -6,44 +6,29 @@
 // Hosted Jev (api.typesafe.ai, model "jev-latest", Bearer key) uses the same shapes but has no batch
 // route, so it gets one small request per video, sent in parallel.
 
+import { distractorsFor } from "../../shared/intent";
 import type { VideoTile } from "../../shared/types";
 import type { DecisionBackend, ModelVerdict } from "./types";
 
 export const ON = "on-intent";
 const INTENT_Q = "intent";
 
-export type ChoiceQuestion = { type: "choice"; instructions: string; criteria: Record<string, string> };
+/** A null description renders the label alone, which keeps the per-tile input short. */
+export type ChoiceQuestion = { type: "choice"; instructions: string; criteria: Record<string, string | null> };
 export type SystemOneRequest = { model: string; state: string; questions: Record<string, ChoiceQuestion> };
 export type SystemOneBatchRequest = { model: string; states: string[]; questions: Record<string, ChoiceQuestion> };
 
-/**
- * Common off-intent categories. Giving off-topic videos somewhere better to go than a single
- * "other" label made Laya rank every on-topic title above every off-topic one in a 40-title eval.
- * Kept under 11 options: the English checkpoint's temperatures are uncalibrated from 11 up.
- */
-export const DISTRACTORS: Record<string, string> = {
-  gaming: "video games and gameplay",
-  music: "music and concerts",
-  food: "cooking and food",
-  sports: "sports and fitness",
-  comedy: "comedy, pranks, memes and reactions",
-  news: "news, politics and celebrities",
-  lifestyle: "vlogs, travel and lifestyle",
-  gadgets: "consumer gadget reviews and unboxing",
-};
-
 /** Bump when the prompt changes, so cached decisions from the old prompt are dropped. */
-export const PROMPT_VERSION = 2;
+export const PROMPT_VERSION = 4;
 
-/** on-intent plus every distractor that doesn't overlap a user topic (a "cooking" topic drops "food"). */
-export function intentCriteria(topics: string[]): Record<string, string> {
-  const words = topics.flatMap((t) => t.toLowerCase().split(/[^\p{L}\p{N}+#]+/u)).filter((w) => w.length >= 4);
-  const overlaps = (label: string, desc: string) => {
-    const text = `${label} ${desc}`.toLowerCase();
-    return words.some((w) => text.includes(w) || w.includes(label));
-  };
-  const kept = Object.entries(DISTRACTORS).filter(([label, desc]) => !overlaps(label, desc));
-  return { [ON]: topics.join(", "), ...Object.fromEntries(kept) };
+/**
+ * on-intent (described) plus the off-intent categories that don't overlap the user's topics, as bare
+ * labels. Laya encodes the whole option list for every tile; describing the 8 distractors cost 2.4x
+ * the time per tile for no gain in separation (40-title eval: AUC 1.000 either way).
+ */
+export function intentCriteria(topics: string[]): Record<string, string | null> {
+  const off = Object.fromEntries(Object.keys(distractorsFor(topics)).map((label) => [label, null]));
+  return { [ON]: topics.join(", "), ...off };
 }
 
 export function tileState(t: VideoTile): string {

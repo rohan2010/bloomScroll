@@ -7,4 +7,8 @@ export LAYA_PORT="${LAYA_PORT:-8765}"
 export LAYA_MODELS="${LAYA_MODELS:-english}"
 export LAYA_DEFAULT_MODEL="${LAYA_DEFAULT_MODEL:-english}"
 export LAYA_THREADS="${LAYA_THREADS:-$(sysctl -n hw.physicalcpu 2>/dev/null || nproc)}"
+if [[ ! -x .venv/bin/laya-serve ]]; then
+  echo "laya-serve isn't installed yet. From the repo root, run: ./setup.sh" >&2
+  exit 1
+fi
 exec .venv/bin/laya-serve
