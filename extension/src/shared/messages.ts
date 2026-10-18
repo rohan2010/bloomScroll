@@ -96,10 +96,15 @@ export type CalibrateRequest = { type: "calibrate" };
 export type ReviewItem = { videoId: string; title: string; channel: string; verdict: "show" | "hide"; reason: string };
 export type ReviewSampleRequest = { type: "review-sample"; n: number };
 
+/** Start, stop or check the local Laya model through the native helper that setup.sh installs. */
+export type LayaControlRequest = { type: "laya-control"; action: "status" | "start" | "stop" | "set-autostart"; enabled?: boolean };
+export type LayaControlState = { running: boolean; starting: boolean; autostart: boolean; port: number };
+export type LayaControlResponse = LayaControlState | { error: "not-installed" | "not-configured" | "failed"; detail?: string };
+
 /** Hidden count for the sending tab, shown on the toolbar icon. */
 export type BadgeRequest = { type: "badge"; count: number };
 
-export type BackgroundMessage = DecideRequest | LabelRequest | WarmRequest | StatusRequest | CalibrateRequest | ReviewSampleRequest | BadgeRequest;
+export type BackgroundMessage = DecideRequest | LabelRequest | WarmRequest | StatusRequest | CalibrateRequest | ReviewSampleRequest | BadgeRequest | LayaControlRequest;
 
 /** Service worker → offscreen document. Vectors come back L2-normalized, so dot product = cosine. */
 export type EmbedRequest = { target: "offscreen"; type: "embed"; texts: string[] };

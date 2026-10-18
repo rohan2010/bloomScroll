@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "../shared/settings
 import { JEV_BASE_URL } from "../background/backends/jev";
 import { IdbCache } from "../background/cache";
 import { setupCalibration } from "./calibration";
+import { setupLayaControl } from "./laya";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const cache = new IdbCache();
@@ -106,6 +107,8 @@ async function main(): Promise<void> {
     },
   });
   calibration.refresh();
+  const layaControl = setupLayaControl(() => read(current));
+  layaControl.refresh();
 
   $("kind").addEventListener("change", () => {
     // Swap the URL to the new kind's default unless the user typed a custom one.
@@ -114,6 +117,7 @@ async function main(): Promise<void> {
     const defaults = [DEFAULT_SETTINGS.backend.url, JEV_BASE_URL, ""];
     if (defaults.includes(url.value.trim().replace(/\/+$/, ""))) url.value = kind === "jev" ? JEV_BASE_URL : DEFAULT_SETTINGS.backend.url;
     syncBackendFields();
+    layaControl.refresh();
   });
 
   $<HTMLFormElement>("form").addEventListener("submit", (e) => {

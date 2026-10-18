@@ -115,15 +115,23 @@ fi
 
 xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 
-# Registers server/start.sh to run at login, and starts it now. macOS: a LaunchAgent. Linux: a
-# systemd user service. Restarted only if it crashes, and start.sh exits 0 when Laya is already up.
-install_autostart() {
+AUTOSTART_DIR="$SERVER_DIR/autostart"
+PLIST_TEMPLATE="$AUTOSTART_DIR/$AUTOSTART_LABEL.plist"
+UNIT_TEMPLATE="$AUTOSTART_DIR/$UNIT_NAME"
+NATIVE_HOST="com.bloomscroll.laya"
+
+# Writes the login item (macOS LaunchAgent / systemd user unit) as a template in server/autostart/,
+# plus control.json for the Settings-page helper (laya_control.py), which copies the template into
+# place when start-at-login is switched on. Always written, so the switch works even after
+# --no-autostart.
+write_service_files() {
   local start log_dir
   start="$SERVER_DIR/start.sh"
+  mkdir -p "$AUTOSTART_DIR"
   if [[ "$OS" == Darwin ]]; then
     log_dir="$HOME/Library/Logs/bloomScroll"
-    mkdir -p "$(dirname "$PLIST")" "$log_dir"
-    cat >"$PLIST" <<EOF
+    mkdir -p "$log_dir"
+    cat >"$PLIST_TEMPLATE" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -144,12 +152,8 @@ install_autostart() {
 </dict>
 </plist>
 EOF
-    launchctl bootout "gui/$(id -u)/$AUTOSTART_LABEL" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "$PLIST"
-    ok "Laya will start automatically when you log in (log: ~/Library/Logs/bloomScroll/laya.log)"
-  elif command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
-    mkdir -p "$(dirname "$UNIT")"
-    cat >"$UNIT" <<EOF
+  else
+    cat >"$UNIT_TEMPLATE" <<EOF
 [Unit]
 Description=bloomScroll local Laya model
 
@@ -162,12 +166,75 @@ RestartSec=30
 [Install]
 WantedBy=default.target
 EOF
+  fi
+  "$VENV/bin/python" - "$AUTOSTART_DIR/control.json" "$AUTOSTART_LABEL" "$LAYA_PORT" "$start" "$PLIST_TEMPLATE" "$UNIT_TEMPLATE" <<'PY'
+import json, sys
+out, label, port, start, plist, unit = sys.argv[1:]
+json.dump({"label": label, "port": int(port), "start_sh": start, "plist_template": plist, "unit_template": unit}, open(out, "w"), indent=2)
+PY
+}
+
+# Registers the login item and starts it now.
+install_autostart() {
+  if [[ "$OS" == Darwin ]]; then
+    mkdir -p "$(dirname "$PLIST")"
+    cp "$PLIST_TEMPLATE" "$PLIST"
+    launchctl bootout "gui/$(id -u)/$AUTOSTART_LABEL" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$PLIST"
+    ok "Laya will start automatically when you log in (log: ~/Library/Logs/bloomScroll/laya.log)"
+  elif command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+    mkdir -p "$(dirname "$UNIT")"
+    cp "$UNIT_TEMPLATE" "$UNIT"
     systemctl --user daemon-reload
     systemctl --user enable --now "$UNIT_NAME" >/dev/null
     ok "Laya will start automatically when you log in (systemd user service $UNIT_NAME)"
   else
-    warn "Couldn't set up automatic start on this system. Start Laya by hand with: $start"
+    warn "Couldn't set up automatic start on this system. Start Laya by hand with: $SERVER_DIR/start.sh"
     return 1
+  fi
+}
+
+# Chrome's ID for an extension loaded with "Load unpacked": the first 32 hex digits of SHA-256 of
+# the folder's absolute path, with 0-9a-f mapped to a-p.
+unpacked_extension_id() { printf '%s' "$1" | (shasum -a 256 2>/dev/null || sha256sum) | cut -c1-32 | tr '0-9a-f' 'a-p'; }
+
+# Lets bloomScroll's Settings page start and stop Laya: registers the helper with each Chromium
+# browser, allowed only for this extension's ID (computed from extension/dist's path, both as
+# written and with symlinks resolved, since either can end up in Chrome).
+install_native_host() {
+  local dist logical physical origins d n=0
+  local -a dirs
+  dist="$EXT_DIR/dist"
+  logical="$(unpacked_extension_id "$dist")"
+  physical="$(unpacked_extension_id "$(cd "$dist" 2>/dev/null && pwd -P || echo "$dist")")"
+  origins="\"chrome-extension://$logical/\""
+  [[ "$physical" != "$logical" ]] && origins="$origins, \"chrome-extension://$physical/\""
+  if [[ -n "${BLOOM_EXTRA_EXTENSION_ID:-}" ]]; then origins="$origins, \"chrome-extension://$BLOOM_EXTRA_EXTENSION_ID/\""; fi
+  if [[ "$OS" == Darwin ]]; then
+    dirs=("$HOME/Library/Application Support/Google/Chrome" "$HOME/Library/Application Support/Chromium" \
+      "$HOME/Library/Application Support/BraveSoftware/Brave-Browser" "$HOME/Library/Application Support/Microsoft Edge")
+  else
+    dirs=("$HOME/.config/google-chrome" "$HOME/.config/chromium" "$HOME/.config/BraveSoftware/Brave-Browser" "$HOME/.config/microsoft-edge")
+  fi
+  chmod +x "$SERVER_DIR/native-host.sh" "$SERVER_DIR/laya_control.py"
+  for d in "${dirs[@]}"; do
+    [[ -d "$d" ]] || continue
+    mkdir -p "$d/NativeMessagingHosts"
+    cat >"$d/NativeMessagingHosts/$NATIVE_HOST.json" <<EOF
+{
+  "name": "$NATIVE_HOST",
+  "description": "bloomScroll: start and stop the local Laya model from Settings",
+  "path": "$SERVER_DIR/native-host.sh",
+  "type": "stdio",
+  "allowed_origins": [$origins]
+}
+EOF
+    n=$((n + 1))
+  done
+  if [[ $n -gt 0 ]]; then
+    ok "Settings can start and stop Laya ($n browser profile folder(s) set up)"
+  else
+    warn "No Chrome, Edge, Brave or Chromium found yet, so Settings can't start or stop Laya. Run bash setup.sh --server-only again after installing one."
   fi
 }
 
@@ -399,6 +466,8 @@ if [[ $WANT_SERVER -eq 1 ]]; then
     warn "Laya couldn't be set up (see above). The extension still works with its built-in model."
   else
     SERVER_STATE="installed"
+    write_service_files || warn "Couldn't write the login item files; start-at-login can't be switched from Settings."
+    install_native_host || warn "Couldn't register the Settings helper; Start and Stop in Settings won't work."
     if [[ $WANT_AUTOSTART -eq 1 ]]; then
       step "Local Laya model: start automatically"
       set +e

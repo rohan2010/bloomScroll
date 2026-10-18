@@ -57,6 +57,14 @@
             <label for="apiKey">API key</label>
             <input id="apiKey" type="password" autocomplete="off" />
           </div>
+          <div id="laya-control" class="laya-control" hidden>
+            <div class="laya-status"><span id="laya-dot" class="dot"></span><span id="laya-text">Checking the local AI…</span></div>
+            <div class="actions">
+              <button id="laya-toggle" type="button" hidden>Stop</button>
+              <label class="check" id="laya-autostart-row" hidden><input type="checkbox" id="laya-autostart" /> Start automatically when I log in</label>
+            </div>
+            <p id="laya-hint" class="hint"></p>
+          </div>
           <p id="jev-notice" class="notice" hidden>Jev sends video titles and channel names to TypeSafe. Local backends send nothing off this machine.</p>
           <p class="hint">The model backend is optional. Without one, bloomScroll still filters with your channel lists, title keywords and its built-in mini model, and shows anything it can't decide.</p>
         </section>

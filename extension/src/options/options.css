@@ -25,6 +25,12 @@ button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.danger { color: var(--danger); }
 #status, #cal-status { color: var(--muted); }
+.laya-control { margin: 10px 0 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.laya-status { display: flex; align-items: center; gap: 8px; font-weight: 500; margin-bottom: 8px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.on { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.dot.busy { background: #d97706; }
+.laya-control .hint { margin: 8px 0 0; }
 .advanced { margin: 14px 0; }
 .advanced > summary { cursor: pointer; color: var(--muted); padding: 6px 2px; }
 .advanced > summary:hover { color: var(--fg); }

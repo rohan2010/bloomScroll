@@ -169,13 +169,18 @@ return in a later update.
 
 <img src="docs/assets/options.png" width="560" alt="The Settings page: Your intent (topics, one per line), Always show and Never show channel lists, clean-up switches, and the model backend.">
 
+*Captured in a test browser, so the Local AI box asks you to run `setup.sh`. After setup it shows
+Local AI (Laya) is running, with Stop / Start and the start-at-login switch.*
+
 - **Your intent:** topics you care about, one per line. Plain words work best ("woodworking",
   "AI research"). Not into tech? Untick **Also keep programming and tech videos** and only your
   own topics stay.
 - **Always show / Never show:** channel names or @handles, one per line. These win over everything
   else.
 - **Clean up YouTube:** hide Shorts, comments and end-of-video suggestions.
-- **Model backend:** leave it on **Local Laya**, which setup installs and starts for you.
+- **Model backend:** leave it on **Local Laya**, which setup installs and starts for you. The
+  **Local AI** box there shows whether it's running, with **Stop** / **Start** buttons and a
+  **Start automatically when I log in** switch.
 - **Calibrate to your taste:** review a few videos and let bloomScroll tune itself (below).
 - **Your data:** export the corrections you've made as a CSV, or delete everything.
 
@@ -262,8 +267,9 @@ memory.
   The next time you open YouTube, bloomScroll wakes it up in the background while the page loads.
 - **It only reads what it has to.** Rules and the built-in model settle most videos (35 of 40 in
   our test feed), so Laya typically reads a handful of titles per page, about 0.4 s each.
-- **It's yours to switch off.** Run `bash setup.sh --remove-autostart` and bloomScroll quietly falls
-  back to its built-in model. Nothing breaks, and nothing gets stuck hidden.
+- **It's yours to switch off.** Press **Stop** in Settings → Model backend (and untick start at
+  login if you like). bloomScroll quietly falls back to its built-in model. Nothing breaks, and
+  nothing gets stuck hidden. **Start** brings it back.
 
 **Why run it locally at all?** The alternative is sending your viewing to someone else's servers.
 A hosted model would mean a subscription or API key, an internet connection, and a company seeing
@@ -344,9 +350,9 @@ again is safe: it skips whatever is already done.
 <details>
 <summary><b>The popup's model row is red</b></summary>
 
-- **"isn't running":** Laya normally starts by itself at login. Start it now with
-  `server/start.sh`, or repair it with `bash setup.sh --server-only`. Its log is in
-  `~/Library/Logs/bloomScroll/laya.log` on a Mac.
+- **"isn't running":** click **Fix** (or ⚙ Settings → Model backend) and press **Start**. If
+  Settings says the controls aren't set up, run `bash setup.sh` once. Still stuck? Repair with
+  `bash setup.sh --server-only`; on a Mac its log is in `~/Library/Logs/bloomScroll/laya.log`.
 - **"not allowed yet":** only happens with Jev or a `localhost` address. Settings → **Save**, then
   **Allow** in the browser prompt.
 - Either way, rules and the built-in model keep filtering; only the unclear videos are shown

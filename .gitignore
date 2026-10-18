@@ -64,3 +64,7 @@ bloomScroll — Build Spec.md
 
 # README asset capture scratch (tests/e2e/readme-assets.spec.ts)
 docs/assets/.frames/
+
+# Machine-specific login item and helper config, written by setup.sh
+server/autostart/
+server/laya.log

@@ -1,4 +1,4 @@
-import { emptyMetrics, type BackendStatus, type BackgroundMessage, type CascadeMetrics, type DecideResponse } from "../shared/messages";
+import { emptyMetrics, type BackendStatus, type BackgroundMessage, type CascadeMetrics, type DecideResponse, type LayaControlRequest, type LayaControlResponse } from "../shared/messages";
 import { loadSettings, modeUsesModel, topicsFor } from "../shared/settings";
 import { backendFromSettings } from "./backends";
 import { IdbCache } from "./cache";
@@ -72,6 +72,21 @@ async function backendStatus(s: Settings): Promise<BackendStatus> {
 chrome.action.setBadgeBackgroundColor({ color: "#1f8a53" }).catch(() => {});
 chrome.action.setBadgeTextColor?.({ color: "#ffffff" })?.catch?.(() => {});
 
+/** Native messaging host registered by setup.sh (server/laya_control.py). */
+const LAYA_HOST = "com.bloomscroll.laya";
+
+async function layaControl(msg: LayaControlRequest): Promise<LayaControlResponse> {
+  try {
+    const reply = (await chrome.runtime.sendNativeMessage(LAYA_HOST, { action: msg.action, enabled: msg.enabled })) as LayaControlResponse | undefined;
+    return reply ?? { error: "failed", detail: "no reply" };
+  } catch (err) {
+    // "Specified native messaging host not found" / "Access to the specified native messaging host is forbidden":
+    // the helper isn't installed for this extension (setup.sh not run, or the folder moved).
+    const text = String((err as Error)?.message ?? err);
+    return /not found|forbidden/i.test(text) ? { error: "not-installed", detail: text } : { error: "failed", detail: text };
+  }
+}
+
 async function handle(msg: BackgroundMessage, sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (msg.type) {
     case "decide": {
@@ -90,6 +105,8 @@ async function handle(msg: BackgroundMessage, sender: chrome.runtime.MessageSend
       return { ok: true };
     case "status":
       return backendStatus(await loadSettings());
+    case "laya-control":
+      return layaControl(msg);
     case "badge":
       if (sender.tab?.id !== undefined) await chrome.action.setBadgeText({ tabId: sender.tab.id, text: msg.count > 0 ? String(Math.min(msg.count, 999)) : "" });
       return { ok: true };
@@ -106,7 +123,7 @@ async function handle(msg: BackgroundMessage, sender: chrome.runtime.MessageSend
 }
 
 chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendResponse) => {
-  if (!["decide", "label", "warm", "status", "review-sample", "calibrate", "badge"].includes(msg?.type)) return;
+  if (!["decide", "label", "warm", "status", "review-sample", "calibrate", "badge", "laya-control"].includes(msg?.type)) return;
   handle(msg, sender).then(sendResponse, (err) => sendResponse({ error: String(err) }));
   return true; // async response
 });

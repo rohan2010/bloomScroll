@@ -5,7 +5,8 @@
   "description": "Local-first YouTube filter: hides off-intent videos, keeps the topics and channels you choose.",
   "permissions": [
     "storage",
-    "offscreen"
+    "offscreen",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
