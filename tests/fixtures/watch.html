@@ -1,0 +1,43 @@
+<html><body>
+<ytd-app>
+  <!-- YouTube keeps the previous home page in the DOM after navigating: must not be scanned as sidebar -->
+  <ytd-browse page-subtype="home" hidden>
+    <ytd-rich-item-renderer>
+      <a id="thumbnail" href="/watch?v=staleHome01"></a>
+      <a id="video-title-link" href="/watch?v=staleHome01" title="Stale home tile">Stale home tile</a>
+    </ytd-rich-item-renderer>
+  </ytd-browse>
+  <ytd-watch-flexy>
+    <div id="primary"><div id="comments"><ytd-comments id="comments"></ytd-comments></div></div>
+    <div id="secondary">
+      <div id="related">
+        <ytd-compact-video-renderer>
+          <ytd-thumbnail><a id="thumbnail" href="/watch?v=linuxKern05">
+            <ytd-thumbnail-overlay-time-status-renderer><span id="text">25:00</span></ytd-thumbnail-overlay-time-status-renderer>
+          </a></ytd-thumbnail>
+          <div class="details">
+            <a href="/watch?v=linuxKern05"><h3><span id="video-title" title="How the Linux kernel boots">How the Linux kernel boots</span></h3></a>
+            <ytd-channel-name><div id="text-container"><yt-formatted-string id="text">Low Level</yt-formatted-string></div></ytd-channel-name>
+          </div>
+        </ytd-compact-video-renderer>
+
+        <yt-lockup-view-model>
+          <div class="yt-lockup-view-model">
+            <a class="yt-lockup-view-model__content-image" href="/watch?v=cookPasta06&amp;list=RD123"></a>
+            <div class="yt-lockup-metadata-view-model">
+              <h3 class="yt-lockup-metadata-view-model__heading-reset">
+                <span class="yt-lockup-metadata-view-model__title">Perfect pasta at home</span>
+              </h3>
+              <yt-content-metadata-view-model>
+                <div class="yt-content-metadata-view-model__metadata-row">
+                  <span class="yt-content-metadata-view-model__metadata-text">Chef Mia</span>
+                </div>
+              </yt-content-metadata-view-model>
+            </div>
+          </div>
+        </yt-lockup-view-model>
+      </div>
+    </div>
+  </ytd-watch-flexy>
+</ytd-app>
+</body></html>

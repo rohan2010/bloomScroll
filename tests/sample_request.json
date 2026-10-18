@@ -1,0 +1,22 @@
+{
+  "model": "english",
+  "state": "User intent: programming, Linux, AI research. Show only videos that match.",
+  "questions": {
+    "v_rustOwn0001": {
+      "type": "choice",
+      "instructions": "Title: 'Rust ownership in 10 minutes' | Channel: 'Let's Get Rusty'",
+      "criteria": {
+        "on-intent": "The video matches the user's intent",
+        "off-intent": "The video does not match the user's intent"
+      }
+    },
+    "v_prank000002": {
+      "type": "choice",
+      "instructions": "Title: 'Top 10 EPIC pranks of the year' | Channel: 'PrankZone'",
+      "criteria": {
+        "on-intent": "The video matches the user's intent",
+        "off-intent": "The video does not match the user's intent"
+      }
+    }
+  }
+}

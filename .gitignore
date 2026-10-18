@@ -1,0 +1,59 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+server/laya.log
+
+# Secrets: API keys belong in env vars or the extension's Options, never in the repo
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Packaged extension (the .pem next to a .crx is the store signing key)
+*.crx
+*.zip
+
+# Personal data: exported labels are your viewing history
+bloomscroll-labels-*.csv
+labels*.csv
+exports/
+
+# Raw YouTube page saves contain your account name, history and session tokens.
+# Save them as *.raw.html, scrub, then commit the scrubbed copy (see tests/fixtures/README.md).
+tests/fixtures/*.raw.html
+
+# Model weights and checkpoints (downloaded from Hugging Face, ~800 MB+)
+server/models/
+server/checkpoints/
+*.safetensors
+*.onnx
+*.bin
+*.pt
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Editor, OS and local tool settings
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.claude/settings.local.json
+
+# Private planning doc, kept local
+bloomScroll — Build Spec.md

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "bloomScroll",
+  "version": "0.0.1",
+  "description": "Local-first YouTube filter: hides off-intent videos, keeps the topics and channels you choose.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.youtube.com/*"],
+  "optional_host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "https://api.typesafe.ai/*"],
+  "background": { "service_worker": "src/background/index.ts", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["src/content/index.ts"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": { "default_title": "bloomScroll", "default_popup": "src/popup/index.html" },
+  "options_page": "src/options/index.html"
+}

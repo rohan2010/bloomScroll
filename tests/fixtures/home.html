@@ -1,0 +1,71 @@
+<html><body>
+<ytd-app>
+  <ytd-browse page-subtype="home">
+    <ytd-rich-grid-renderer>
+      <div id="contents">
+        <!-- classic rich item -->
+        <ytd-rich-item-renderer>
+          <div id="content"><ytd-rich-grid-media>
+            <ytd-thumbnail>
+              <a id="thumbnail" href="/watch?v=rustOwn0001&amp;pp=abc">
+                <ytd-thumbnail-overlay-time-status-renderer><span id="text"> 10:42 </span></ytd-thumbnail-overlay-time-status-renderer>
+              </a>
+            </ytd-thumbnail>
+            <div id="details">
+              <h3><a id="video-title-link" href="/watch?v=rustOwn0001" title="Rust ownership in 10 minutes">
+                <yt-formatted-string id="video-title">Rust ownership in 10 minutes</yt-formatted-string></a></h3>
+              <ytd-channel-name><div id="text-container"><yt-formatted-string id="text">
+                <a href="/@letsgetrusty">Let's Get Rusty</a></yt-formatted-string></div></ytd-channel-name>
+            </div>
+          </ytd-rich-grid-media></div>
+        </ytd-rich-item-renderer>
+
+        <!-- 2025+ lockup inside a rich item -->
+        <ytd-rich-item-renderer>
+          <div id="content">
+            <yt-lockup-view-model>
+              <div class="yt-lockup-view-model">
+                <a class="yt-lockup-view-model__content-image" href="/watch?v=prank000002">
+                  <yt-thumbnail-view-model><yt-thumbnail-badge-view-model>
+                    <badge-shape><div class="yt-badge-shape__text">1:02:03</div></badge-shape>
+                  </yt-thumbnail-badge-view-model></yt-thumbnail-view-model>
+                </a>
+                <div class="yt-lockup-metadata-view-model">
+                  <h3><a class="yt-lockup-metadata-view-model__title" href="/watch?v=prank000002"><span>Top 10   EPIC pranks
+                    of the year</span></a></h3>
+                  <yt-content-metadata-view-model>
+                    <div class="yt-content-metadata-view-model__metadata-row">
+                      <span class="yt-content-metadata-view-model__metadata-text"><a href="/channel/UCprankChannel01">PrankZone</a></span>
+                    </div>
+                    <div class="yt-content-metadata-view-model__metadata-row">
+                      <span class="yt-content-metadata-view-model__metadata-text">2.1M views</span>
+                    </div>
+                  </yt-content-metadata-view-model>
+                </div>
+              </div>
+            </yt-lockup-view-model>
+          </div>
+        </ytd-rich-item-renderer>
+
+        <!-- title not rendered yet: must be skipped -->
+        <ytd-rich-item-renderer>
+          <a id="thumbnail" href="/watch?v=lazy0000003"></a>
+          <a id="video-title-link" href="/watch?v=lazy0000003"><yt-formatted-string id="video-title"></yt-formatted-string></a>
+        </ytd-rich-item-renderer>
+
+        <!-- ad slot: no video link -->
+        <ytd-rich-item-renderer><ytd-ad-slot-renderer><a href="https://ads.example.com">Ad</a></ytd-ad-slot-renderer></ytd-rich-item-renderer>
+
+        <!-- shorts shelf -->
+        <ytd-rich-section-renderer>
+          <ytd-rich-shelf-renderer is-shorts>
+            <ytd-rich-item-renderer>
+              <a href="/shorts/shortVid0004"><h3><span>Wait for it…</span></h3></a>
+            </ytd-rich-item-renderer>
+          </ytd-rich-shelf-renderer>
+        </ytd-rich-section-renderer>
+      </div>
+    </ytd-rich-grid-renderer>
+  </ytd-browse>
+</ytd-app>
+</body></html>

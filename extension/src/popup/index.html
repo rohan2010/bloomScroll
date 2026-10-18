@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bloomScroll</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <header><strong>bloomScroll</strong><a id="options" href="#">Settings</a></header>
+    <div class="modes" role="radiogroup" aria-label="Focus mode">
+      <button data-mode="work" role="radio">Work</button>
+      <button data-mode="learn" role="radio">Learn</button>
+      <button data-mode="relax" role="radio">Relax</button>
+      <button data-mode="off" role="radio">Off</button>
+    </div>
+    <p id="mode-hint" class="hint"></p>
+    <section id="stats" class="stats"></section>
+    <p id="warning" class="warning" hidden></p>
+    <p id="backend" class="backend"></p>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bloomScroll Settings</title>
+    <link rel="stylesheet" href="./options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>bloomScroll</h1>
+      <p class="lede">Everything here stays on this computer. The only network call goes to the model backend below.</p>
+
+      <form id="form">
+        <section>
+          <h2>Your intent</h2>
+          <label for="topics">Topics, one per line. Used in Learn mode on top of the built-in tech topics.</label>
+          <textarea id="topics" rows="5" placeholder="Linux&#10;AI research&#10;woodworking"></textarea>
+        </section>
+
+        <section class="cols">
+          <div>
+            <h2>Always show</h2>
+            <label for="allow">Channel names or @handles, one per line.</label>
+            <textarea id="allow" rows="5" placeholder="@Fireship&#10;3Blue1Brown"></textarea>
+          </div>
+          <div>
+            <h2>Never show</h2>
+            <label for="block">Channel names or @handles, one per line.</label>
+            <textarea id="block" rows="5"></textarea>
+          </div>
+        </section>
+
+        <section>
+          <h2>Clean up YouTube</h2>
+          <label class="check"><input type="checkbox" id="hideShorts" /> Hide Shorts <small>(always hidden in Work and Learn)</small></label>
+          <label class="check"><input type="checkbox" id="hideComments" /> Hide comments</label>
+          <label class="check"><input type="checkbox" id="hideEndscreen" /> Hide end-screen suggestions</label>
+        </section>
+
+        <section>
+          <h2>Model backend</h2>
+          <div class="row">
+            <label for="kind">Kind</label>
+            <select id="kind">
+              <option value="laya">Local Laya (laya-serve)</option>
+              <option value="openjev">Other local /v1/systemone server</option>
+              <option value="jev">Jev (TypeSafe, your own key)</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="url">URL</label>
+            <input id="url" type="url" placeholder="http://127.0.0.1:8765" />
+          </div>
+          <div class="row" id="key-row">
+            <label for="apiKey">API key</label>
+            <input id="apiKey" type="password" autocomplete="off" />
+          </div>
+          <p id="jev-notice" class="notice" hidden>Jev sends video titles and channel names to TypeSafe. Local backends send nothing off this machine.</p>
+          <p class="hint">Without a reachable model, bloomScroll still applies your channel lists and title keywords, and shows everything else.</p>
+        </section>
+
+        <section>
+          <h2>Thresholds</h2>
+          <div class="row"><label for="embedShow">Embedding show ≥</label><input id="embedShow" type="number" min="0" max="1" step="0.01" /></div>
+          <div class="row"><label for="embedHide">Embedding hide ≤</label><input id="embedHide" type="number" min="0" max="1" step="0.01" /></div>
+          <div class="row"><label for="modelShow">Model show if P(on-intent) ≥</label><input id="modelShow" type="number" min="0" max="1" step="0.01" /></div>
+          <div class="row"><label for="modelMinConf">Model min confidence</label><input id="modelMinConf" type="number" min="0.5" max="1" step="0.01" /></div>
+        </section>
+
+        <div class="actions">
+          <button type="submit" class="primary">Save</button>
+          <span id="status" role="status"></span>
+        </div>
+      </form>
+
+      <section>
+        <h2>Your data</h2>
+        <p id="label-count" class="hint"></p>
+        <div class="actions">
+          <button id="export" type="button">Export labels (CSV)</button>
+          <button id="wipe" type="button" class="danger">Delete labels and cached decisions</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>
