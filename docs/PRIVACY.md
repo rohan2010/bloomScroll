@@ -11,6 +11,8 @@
   decisions (with each video's title and channel, kept 14 days so Settings can offer them for
   review), live in the browser's IndexedDB. Settings has one-click export and delete.
 - Required permissions: `storage`, `offscreen` (to run the embedding model, which a service worker
-  can't host) and `https://www.youtube.com/*`. Model backend hosts
-  (`127.0.0.1`, `localhost`, `api.typesafe.ai`) are optional and requested only when you save a
-  backend URL in Options.
+  can't host), `https://www.youtube.com/*`, and `http://127.0.0.1/*`, which is your own computer, so
+  the extension can reach the local Laya model without an extra prompt. `localhost` and
+  `api.typesafe.ai` (Jev) are optional and requested only when you choose them in Settings.
+- `setup.sh` installs Laya to start automatically at login; it listens only on `127.0.0.1`.
+  `bash setup.sh --remove-autostart` turns that off.

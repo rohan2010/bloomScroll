@@ -85,7 +85,7 @@ needed if you work on the local Laya server.
 ```bash
 git clone https://github.com/rohan2010/bloomScroll.git
 cd bloomScroll
-bash setup.sh --no-server      # or plain `bash setup.sh` to include Laya
+bash setup.sh --no-server      # or plain `bash setup.sh` for everything, incl. Laya at login
 cd extension
 pnpm dev                       # rebuilds extension/dist as you edit
 ```

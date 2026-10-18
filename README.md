@@ -64,24 +64,16 @@ The real extension on a test feed of 40 videos: off-topic ones dissolve, the res
 | <img src="docs/assets/popup.png" width="260" alt="The bloomScroll popup: Learn, Relax and Off modes; this tab shows 24 shown, 16 hidden, 0 pending, settled in 1.5 s; model status; switches for Shorts, comments, end screens, vanish animation and debug overlay."> | <img src="docs/assets/drawer.png" width="260" alt="The Hidden drawer listing 16 removed videos, each with the stage that removed it, its channel, the reason and a Show button."> | <img src="docs/assets/debug.png" width="260" alt="The debug overlay: time until the page settled, counts, a coloured bar of which stage decided how many videos, per-video timings and recent decisions."> |
 | Pick a mode, see what happened on this tab, flip clean-up switches. The toolbar icon also shows how many videos were hidden. | Everything removed from this page, and why. One click brings a video back. | For the curious: timings and what decided each video. |
 
-*These screenshots come from a test browser without the optional local AI connected, which is
-why the popup shows a red "not allowed yet" row. Once you click **Save → Allow** in Settings, it
-turns green.*
+*These screenshots come from a test browser without Laya running, which is why the popup's model
+row is red. On your computer, Laya starts by itself after setup and the dot is green.*
 
 ## Get started
 
-There are two ways to set it up. **If you're not technical, take path A.** It's quicker and needs
-nothing beyond a browser and one free tool. You can add path B later.
-
-| | **A. Easy** (recommended to start) | **B. With the local AI** |
-| --- | --- | --- |
-| Filters with | your channel lists, title keywords and a built-in mini AI model | all of that, plus Laya, a bigger AI model on your computer for the unclear cases |
-| Accuracy | good: in tests it caught 16 of 20 off-topic videos and never hid a wanted one | best: the unclear cases get a second opinion |
-| Needs | Chrome, Edge or Brave, plus Node.js | the same, plus Python and about 2 GB of disk space |
-| Effect on your computer | barely noticeable | some memory while it's working, little when idle ([why it's worth it](#will-it-slow-down-my-computer)) |
-| Setup time | about 5 minutes | about 10–15 minutes (mostly downloading) |
-
-### Path A: the easy way
+One setup installs **everything**: the extension, its built-in model, and Laya, the local AI that
+settles the videos the built-in model isn't sure about. It takes about 15 minutes, mostly
+downloading (about 2 GB), and you only do it once. All you need beforehand is a browser and one free
+tool; the setup fetches everything else, including the right version of Python if your computer
+doesn't have it.
 
 **1. Install Node.js** (a free tool used to build the extension once). Go to
 [nodejs.org](https://nodejs.org), download the **LTS** version and install it like any other app.
@@ -96,11 +88,12 @@ press Enter). Type `cd ` (with a space), drag the bloomScroll folder onto the Te
 press Enter, then run:
 
 ```bash
-bash setup.sh --no-server
+bash setup.sh
 ```
 
-It checks your computer, downloads what it needs (about 50 MB) and builds the extension. When it
-finishes it prints **Next steps**.
+It checks your computer, builds the extension, installs Laya and sets it to **start by itself
+whenever you log in**, so there's nothing to remember afterwards. If it needs to download its own
+Python, it asks first. When it finishes it prints **Next steps** and *Local AI (Laya): running*.
 
 **4. Add the extension to your browser.**
 1. Open Chrome and type `chrome://extensions` in the address bar (in Edge, `edge://extensions`; in
@@ -109,40 +102,39 @@ finishes it prints **Next steps**.
 3. Click **Load unpacked** and choose the `extension/dist` folder inside bloomScroll.
 4. Click the puzzle-piece icon in the toolbar and pin **bloomScroll** so it's always visible.
 
-**5. Open YouTube.** That's it. Off-topic videos start dissolving within a second or two. Click
-the bloomScroll icon to pick a mode or add your own topics under ⚙ Settings.
+**5. Tell it what you came for.** The Settings page opens by itself. Add your topics, one per line,
+and click **Save**.
+
+**6. Open YouTube.** That's it. Off-topic videos start dissolving within a second or two. The
+bloomScroll icon shows how many were hidden, and its popup should show a green dot: *Local Laya
+connected*.
 
 > **On Windows?** `setup.sh` needs a bash terminal: install [Git for Windows](https://git-scm.com)
-> and run it in **Git Bash**, or use WSL. This hasn't been tested on Windows yet; if it fails, the
-> by-hand steps under [What you need](#what-you-need) work anywhere Node runs. The browser steps
-> are the same.
+> and run it in **Git Bash**, or use WSL. bloomScroll is built and tested on a Mac, so this may or
+> may not work yet; if it fails, the by-hand steps under [What you need](#what-you-need) work
+> anywhere Node runs. The browser steps are the same.
 
-### Path B: add the local AI (Laya)
+### Why Laya runs on your computer
 
-Laya is a small open-source AI model that runs on your computer and settles the videos the
-built-in model isn't sure about.
+**It keeps bloomScroll private and free.** Your watching habits are personal, so the deciding
+happens on your own machine: no titles leave it, there's no subscription or API key, and it keeps
+working offline. Laya is small enough to run on an ordinary laptop (this was built on a 2017
+MacBook Pro), and it's designed for exactly this kind of quick yes-or-no decision. It listens only
+on your own computer (`127.0.0.1`), never on your network. Wondering about memory? See
+[Will it slow down my computer?](#will-it-slow-down-my-computer)
 
-**Why Laya?** It keeps bloomScroll private and free. Your watching habits are personal, so the
-deciding happens on your own machine: no titles leave it, there's no subscription or API key, and
-it keeps working offline. Laya is small enough to run on an ordinary laptop (this was built on a
-2017 MacBook Pro), and it's designed for exactly this kind of quick yes-or-no decision. Hosted
-models like Jev are supported as an option, but nobody needs one. You need Python 3.10–3.12, or **3.11 on an Intel Mac**; the setup
-tells you if anything is missing and how to get it.
+<details>
+<summary><b>Other setup options</b> (a lighter install, no automatic start, adding Laya later)</summary>
 
-```bash
-bash setup.sh            # builds the extension and installs Laya (~1 GB of packages + an 846 MB model)
-server/start.sh          # starts Laya; leave this window open while you browse
-```
+| Command | What it does |
+| --- | --- |
+| `bash setup.sh` | Everything (recommended) |
+| `bash setup.sh --no-server` | The extension and built-in model only, about 50 MB. Unclear videos are simply shown. |
+| `bash setup.sh --server-only` | Only Laya: add it later, or repair it |
+| `bash setup.sh --no-autostart` | Everything, but Laya doesn't start at login; start it yourself with `server/start.sh` |
+| `bash setup.sh --remove-autostart` | Stop Laya starting at login (and stop it now) |
 
-Wait for `Uvicorn running on http://127.0.0.1:8765`. Then, in the browser:
-
-1. Load (or reload) the extension as in step 4 above.
-2. Click the bloomScroll icon → ⚙ **Settings**. Model backend should be **Local Laya** with URL
-   `http://127.0.0.1:8765`. Click **Save**, then **Allow** when the browser asks.
-3. Reload YouTube. The popup's model row should show a green dot: *Local Laya connected*.
-
-Laya only listens on your own computer (`127.0.0.1`), never on your network. Each time you want
-it, start it again with `server/start.sh`.
+</details>
 
 ### Optional: Jev (hosted, with your own key)
 
@@ -183,7 +175,7 @@ return in a later update.
 - **Always show / Never show:** channel names or @handles, one per line. These win over everything
   else.
 - **Clean up YouTube:** hide Shorts, comments and end-of-video suggestions.
-- **Model backend:** optional. Leave it on Local Laya if you followed path B.
+- **Model backend:** leave it on **Local Laya**, which setup installs and starts for you.
 - **Calibrate to your taste:** review a few videos and let bloomScroll tune itself (below).
 - **Your data:** export the corrections you've made as a CSV, or delete everything.
 
@@ -257,20 +249,21 @@ The whole speed audit, including what didn't work, is in [`server/README.md`](se
 
 ## Will it slow down my computer?
 
-Short answer: **path A, no. Path B, only while it's working, and you can switch it off any time.**
+Short answer: **the built-in model, no. Laya, only while it's working, and you can switch it off
+any time.**
 These numbers come from the slowest machine bloomScroll targets, a 2017 MacBook Pro with 8 GB of
 memory.
 
-- **The built-in model (both paths)** is 23 MB. It does a moment of work when new videos appear,
+- **The built-in model** is 23 MB. It does a moment of work when new videos appear,
   then sits idle. YouTube itself uses far more of your computer than bloomScroll does.
-- **Laya (path B)** needs up to about 1.5 GB of memory while it's reading titles, about as much as
+- **Laya** needs up to about 1.5 GB of memory while it's reading titles, about as much as
   a few busy browser tabs. When you're not on YouTube it uses essentially no processor time, and
   the operating system reclaims its memory: after a quiet spell we measured it holding just 4 MB.
   The next time you open YouTube, bloomScroll wakes it up in the background while the page loads.
 - **It only reads what it has to.** Rules and the built-in model settle most videos (35 of 40 in
   our test feed), so Laya typically reads a handful of titles per page, about 0.4 s each.
-- **It's yours to switch off.** Close the Laya window and bloomScroll quietly falls back to path A.
-  Nothing breaks, and nothing gets stuck hidden.
+- **It's yours to switch off.** Run `bash setup.sh --remove-autostart` and bloomScroll quietly falls
+  back to its built-in model. Nothing breaks, and nothing gets stuck hidden.
 
 **Why run it locally at all?** The alternative is sending your viewing to someone else's servers.
 A hosted model would mean a subscription or API key, an internet connection, and a company seeing
@@ -283,8 +276,8 @@ laptop's time is a good trade for the hour a recommended rabbit hole can take.
 bloomScroll is an early release, and performance is the main focus of the next updates. These are
 planned, not promises:
 
-- **No separate server.** Run Laya inside the extension itself, so path B needs no Python, no
-  terminal window and no background process.
+- **No separate server.** Run Laya inside the extension itself, so it needs no Python and no
+  background process.
 - **Lighter models.** Smaller, compressed versions of the model that use a fraction of the memory.
   The first attempt cost too much accuracy, so it isn't shipped until it's both fast *and* right.
 - **Faster on newer Macs.** Use Apple Silicon's built-in acceleration (M1 and later).
@@ -293,15 +286,15 @@ planned, not promises:
 
 ## What you need
 
-| | Path A (easy) | Path B (local AI) |
+| | Full setup (`bash setup.sh`) | Lighter install (`--no-server`) |
 | --- | --- | --- |
 | Browser | Chrome, Edge or Brave (any recent version) | same |
 | [Node.js](https://nodejs.org) | 20 or newer (the LTS download is fine) | same |
 | pnpm | not needed: `setup.sh` uses it through Node's corepack | same |
-| Python | not needed | 3.10–3.12; **3.11 on an Intel Mac** |
-| Disk space | about 50 MB | about 2 GB (PyTorch plus the 846 MB model) |
-| Memory | very little ([details](#will-it-slow-down-my-computer)) | up to about 1.5 GB while Laya is working, much less when idle ([details](#will-it-slow-down-my-computer)) |
-| Operating system | built and tested on macOS; Linux and Windows (Git Bash or WSL) may work, untested | built and tested on macOS; Linux and WSL untested |
+| Python | nothing to install yourself: setup uses yours if it's suitable, otherwise downloads its own (3.11 on Intel Macs) | not needed |
+| Disk space | about 2 GB (PyTorch plus the 846 MB model) | about 50 MB |
+| Memory | up to about 1.5 GB while Laya is working, much less when idle ([details](#will-it-slow-down-my-computer)) | very little |
+| Operating system | built and tested on macOS; Linux and WSL may work, untested | built and tested on macOS; Linux and Windows (Git Bash or WSL) may work, untested |
 
 `setup.sh` installs the Python side from pinned requirement files, so you don't have to:
 
@@ -330,8 +323,9 @@ Use `server/.venv/bin/python -m pip`, not a bare `pip3`: it always installs into
 
 </details>
 
-`setup.sh` options: `--no-server` (extension only), `--server-only` (just Laya), `--python PATH`
-(use a specific Python), `--help`. Running it again is safe: it skips whatever is already done.
+`setup.sh` options: `--no-server` (extension only), `--server-only` (just Laya),
+`--no-autostart`, `--remove-autostart`, `--python PATH` (use a specific Python), `--help`. Running it
+again is safe: it skips whatever is already done.
 
 ## Troubleshooting
 
@@ -350,8 +344,11 @@ Use `server/.venv/bin/python -m pip`, not a bare `pip3`: it always installs into
 <details>
 <summary><b>The popup's model row is red</b></summary>
 
-- **"isn't running":** start it with `server/start.sh` and leave that window open.
-- **"not allowed yet":** Settings → **Save**, then **Allow** in the browser prompt.
+- **"isn't running":** Laya normally starts by itself at login. Start it now with
+  `server/start.sh`, or repair it with `bash setup.sh --server-only`. Its log is in
+  `~/Library/Logs/bloomScroll/laya.log` on a Mac.
+- **"not allowed yet":** only happens with Jev or a `localhost` address. Settings → **Save**, then
+  **Allow** in the browser prompt.
 - Either way, rules and the built-in model keep filtering; only the unclear videos are shown
   instead of decided.
 </details>

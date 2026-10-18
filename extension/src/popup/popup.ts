@@ -100,7 +100,7 @@ async function renderModel(s: Settings): Promise<void> {
   const fix = $<HTMLButtonElement>("model-fix");
   const text: Record<BackendStatus["state"], string> = {
     connected: `${name} connected${st?.latencyMs !== undefined ? ` · ${Math.round(st.latencyMs)} ms` : ""}`,
-    down: `${name} isn't running. Start server/start.sh.`,
+    down: `${name} isn't running. It normally starts when you log in; to start it now, run server/start.sh.`,
     "no-permission": `${name} not allowed yet.`,
     "invalid-url": `${name} URL is invalid.`,
     unused: "",
@@ -108,7 +108,7 @@ async function renderModel(s: Settings): Promise<void> {
   dot.className = `dot ${st?.state === "connected" ? "ok" : "bad"}`;
   $("model-text").textContent = st ? text[st.state] : `${name}: unknown`;
   // Rules and embeddings still work without a model, so say so rather than alarm.
-  if (st && st.state !== "connected") $("model-text").textContent += " Rules and embeddings still filter.";
+  if (st && st.state !== "connected") $("model-text").textContent += " The built-in model still filters.";
   fix.hidden = !st || st.state === "connected" || st.state === "down";
 }
 
