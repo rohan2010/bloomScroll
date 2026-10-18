@@ -85,3 +85,49 @@ test("home feed: tiles vanish, debug panel and drawer render with timings", asyn
     await popup.screenshot({ path: `${SHOTS}/popup.png`, fullPage: true });
   }
 });
+
+test("hover Hide removes a kept video and the correction survives a reload; Show undoes it", async ({ context, extensionId }) => {
+  const options = await context.newPage();
+  await options.goto(`chrome-extension://${extensionId}/src/options/index.html`);
+  await options.evaluate(async () => {
+    const { settings = {} } = await chrome.storage.local.get("settings");
+    await chrome.storage.local.set({ settings: { ...settings, mode: "work", debug: false, animations: true, backend: { kind: "laya", url: "http://127.0.0.1:9" } } });
+  });
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.route("https://www.youtube.com/**", (route) => route.fulfill({ contentType: "text/html", body: homeFeedHtml() }));
+  const decided = () => page.locator("ytd-rich-item-renderer[data-bloom=show], ytd-rich-item-renderer[data-bloom=hide]").count();
+  await page.goto("https://www.youtube.com/");
+  await expect.poll(decided, { timeout: 60_000 }).toBe(40);
+
+  // The first tile is "Rust ownership in 10 minutes", kept by the keyword rule.
+  const rust = page.locator('ytd-rich-item-renderer:has(a[href="/watch?v=n0000000000"])');
+  await expect(rust).toHaveAttribute("data-bloom", "show");
+  await rust.hover();
+  const btn = page.locator("bloomscroll-feedback").locator(".btn.on");
+  await expect(btn).toBeVisible();
+  await btn.click();
+  await expect(rust).toHaveAttribute("data-bloom", "hide");
+  await expect.poll(() => rust.evaluate((e) => e.classList.contains("bloom-hidden")), { timeout: 5_000 }).toBe(true);
+
+  // Survives a reload: the stored label decides before rules even run.
+  await page.reload();
+  await expect.poll(decided, { timeout: 60_000 }).toBe(40);
+  await expect(rust).toHaveAttribute("data-bloom", "hide");
+  const reason = await page.locator("bloomscroll-drawer").evaluate((h) => {
+    (h.shadowRoot!.querySelector(".toggle") as HTMLElement).click();
+    const li = [...h.shadowRoot!.querySelectorAll("li")].find((l) => l.textContent?.includes("Rust ownership"));
+    return li?.textContent ?? "";
+  });
+  expect(reason).toContain("you hid this");
+
+  // Show from the drawer flips it back, and that sticks too.
+  await page.locator("bloomscroll-drawer").evaluate((h) => {
+    const li = [...h.shadowRoot!.querySelectorAll("li")].find((l) => l.textContent?.includes("Rust ownership"))!;
+    (li.querySelector(".show") as HTMLElement).click();
+  });
+  await expect(rust).toHaveAttribute("data-bloom", "show");
+  await page.reload();
+  await expect.poll(decided, { timeout: 60_000 }).toBe(40);
+  await expect(rust).toHaveAttribute("data-bloom", "show");
+});

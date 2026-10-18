@@ -1,7 +1,10 @@
-import type { Decision, Label, Mode, Surface, VideoTile } from "./types";
+import type { Decision, Label, Mode, Settings, Surface, VideoTile } from "./types";
 
 /** Reason on fail-open decisions; the content script retries tiles that carry it. */
 export const NO_MODEL_REASON = "no model available, shown by default";
+/** Reasons on decisions that come from the user's own corrections. */
+export const USER_SHOWN = "you chose to show this";
+export const USER_HIDDEN = "you hid this";
 
 /**
  * stages "fast": cache, rules and embeddings only, answering in milliseconds and leaving
@@ -59,7 +62,41 @@ export type BackendStatus = {
   latencyMs?: number;
 };
 
-export type BackgroundMessage = DecideRequest | LabelRequest | WarmRequest | StatusRequest;
+export type Thresholds = Settings["thresholds"];
+
+/** How a set of thresholds does on labelled videos. */
+export type CalibrationScores = {
+  n: number;
+  /** Of the videos it would show, the share the user wanted. */
+  precision: number;
+  /** Of the videos the user wanted, the share it would hide. */
+  wronglyHidden: number;
+  wrongHides: number;
+  wrongShows: number;
+  cost: number;
+};
+
+export type CalibrationReport =
+  | {
+      ok: true;
+      counts: { labels: number; wanted: number; unwanted: number };
+      current: Thresholds;
+      proposed: Thresholds;
+      modelUsed: boolean;
+      /** True when before/after were measured on held-out labels the fit never saw. */
+      heldOut: boolean;
+      before: CalibrationScores;
+      after: CalibrationScores;
+    }
+  | { ok: false; reason: "not-enough-labels" | "mode"; counts: { labels: number; wanted: number; unwanted: number }; current: Thresholds };
+
+export type CalibrateRequest = { type: "calibrate" };
+
+/** A recently decided video for the review queue in Settings. */
+export type ReviewItem = { videoId: string; title: string; channel: string; verdict: "show" | "hide"; reason: string };
+export type ReviewSampleRequest = { type: "review-sample"; n: number };
+
+export type BackgroundMessage = DecideRequest | LabelRequest | WarmRequest | StatusRequest | CalibrateRequest | ReviewSampleRequest;
 
 /** Service worker → offscreen document. Vectors come back L2-normalized, so dot product = cosine. */
 export type EmbedRequest = { target: "offscreen"; type: "embed"; texts: string[] };

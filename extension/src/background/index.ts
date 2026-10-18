@@ -2,6 +2,7 @@ import { emptyMetrics, type BackendStatus, type BackgroundMessage, type CascadeM
 import { loadSettings, modeUsesModel, topicsFor } from "../shared/settings";
 import { backendFromSettings } from "./backends";
 import { IdbCache } from "./cache";
+import { calibrate } from "./calibrate";
 import { OffscreenEmbedder } from "./embedder";
 import { cacheKey, decideBatch, modeIdFor } from "./cascade";
 import type { Decision, Settings, VideoTile } from "../shared/types";
@@ -13,7 +14,7 @@ const embedder = new OffscreenEmbedder();
 const inFlight = new Map<string, Promise<Decision | undefined>>();
 
 function depsFor(settings: Settings) {
-  return { settings, store: cache, embedder, backend: backendFromSettings(settings), fallback: null }; // fallback: opt-in Jev, weekend 3
+  return { settings, store: cache, labels: cache, embedder, backend: backendFromSettings(settings), fallback: null }; // fallback: opt-in Jev, weekend 3
 }
 
 async function decideOnce(tiles: VideoTile[], settings: Settings, metrics?: CascadeMetrics): Promise<Decision[]> {
@@ -86,6 +87,12 @@ async function handle(msg: BackgroundMessage): Promise<unknown> {
       return { ok: true };
     case "status":
       return backendStatus(await loadSettings());
+    case "review-sample":
+      return { items: await cache.sampleForReview(msg.n) };
+    case "calibrate": {
+      const settings = await loadSettings();
+      return calibrate({ settings, labels: await cache.listLabels(), embedder, backend: backendFromSettings(settings) });
+    }
     case "label":
       await cache.addLabel(msg.label);
       return { ok: true };
@@ -93,7 +100,7 @@ async function handle(msg: BackgroundMessage): Promise<unknown> {
 }
 
 chrome.runtime.onMessage.addListener((msg: BackgroundMessage, _sender, sendResponse) => {
-  if (!["decide", "label", "warm", "status"].includes(msg?.type)) return;
+  if (!["decide", "label", "warm", "status", "review-sample", "calibrate"].includes(msg?.type)) return;
   handle(msg).then(sendResponse, (err) => sendResponse({ error: String(err) }));
   return true; // async response
 });

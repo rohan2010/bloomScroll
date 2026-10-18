@@ -24,4 +24,20 @@ textarea, input, select { width: 100%; font: inherit; color: inherit; background
 button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.danger { color: var(--danger); }
-#status { color: var(--muted); }
+#status, #cal-status { color: var(--muted); }
+button.link { border: 0; background: transparent; color: var(--accent); padding: 7px 4px; }
+.cal-progress { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; }
+.meter { flex: 0 0 160px; height: 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 200ms ease; }
+.review { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.review-card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.rv-title { font-size: 17px; font-weight: 600; margin: 4px 0 2px; }
+.question { margin: 12px 0 8px; font-weight: 500; }
+kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 6px; opacity: 0.7; }
+.report { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.report table { width: 100%; border-collapse: collapse; margin: 8px 0; font-variant-numeric: tabular-nums; }
+.report th, .report td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.report th:not(:first-child), .report td:not(:first-child) { text-align: right; }
+.report .better { color: var(--accent); font-weight: 600; }
+.report .worse { color: var(--danger); font-weight: 600; }
+.notice.ok { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--fg); }

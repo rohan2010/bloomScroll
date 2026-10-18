@@ -1,11 +1,13 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Decision, Label } from "../shared/types";
-import { cacheKey, type DecisionStore } from "./cascade";
+import type { ReviewItem } from "../shared/messages";
+import { cacheKey, type DecisionStore, type LabelStore } from "./cascade";
 
 export const DECISION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 export const DECISION_CAP = 20_000;
 
-type StoredDecision = Decision & { key: string };
+/** Title and channel are kept with the decision (locally) so Settings can offer it for review. */
+type StoredDecision = Decision & { key: string; title?: string; channel?: string };
 
 interface BloomDB extends DBSchema {
   decisions: { key: string; value: StoredDecision; indexes: { decidedAt: number } };
@@ -23,7 +25,7 @@ export function openBloomDb(name = "bloomscroll"): Promise<IDBPDatabase<BloomDB>
   });
 }
 
-export class IdbCache implements DecisionStore {
+export class IdbCache implements DecisionStore, LabelStore {
   constructor(private db: Promise<IDBPDatabase<BloomDB>> = openBloomDb()) {}
 
   async getMany(keys: string[]): Promise<(Decision | undefined)[]> {
@@ -31,7 +33,7 @@ export class IdbCache implements DecisionStore {
     return Promise.all(keys.map((k) => tx.store.get(k)));
   }
 
-  async putMany(decisions: Decision[]): Promise<void> {
+  async putMany(decisions: (Decision & { title?: string; channel?: string })[]): Promise<void> {
     if (!decisions.length) return;
     const tx = (await this.db).transaction("decisions", "readwrite");
     await Promise.all([...decisions.map((d) => tx.store.put({ ...d, key: cacheKey(d.modeId, d.videoId) })), tx.done]);
@@ -56,12 +58,43 @@ export class IdbCache implements DecisionStore {
     return removed;
   }
 
+  /**
+   * A random sample of recently decided videos the user hasn't labelled, half shown and half
+   * hidden when possible, for the calibration review queue.
+   */
+  async sampleForReview(n: number): Promise<ReviewItem[]> {
+    const db = await this.db;
+    const [rows, labels] = await Promise.all([db.getAll("decisions"), db.getAllKeys("labels")]);
+    const labelled = new Set(labels);
+    const byVideo = new Map<string, StoredDecision>();
+    for (const r of rows) if (r.title && !labelled.has(r.videoId)) byVideo.set(r.videoId, r);
+    const shuffle = <T>(xs: T[]) => {
+      for (let i = xs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [xs[i], xs[j]] = [xs[j], xs[i]];
+      }
+      return xs;
+    };
+    const all = [...byVideo.values()];
+    const shown = shuffle(all.filter((r) => r.verdict === "show"));
+    const hidden = shuffle(all.filter((r) => r.verdict === "hide"));
+    const half = Math.ceil(n / 2);
+    const pick = [...hidden.slice(0, half), ...shown.slice(0, n - Math.min(half, hidden.length))].slice(0, n);
+    return shuffle(pick).map((r) => ({ videoId: r.videoId, title: r.title!, channel: r.channel ?? "", verdict: r.verdict, reason: r.reason }));
+  }
+
   async clearDecisions(): Promise<void> {
     await (await this.db).clear("decisions");
   }
 
   async addLabel(label: Label): Promise<void> {
     await (await this.db).put("labels", label);
+  }
+
+  /** The user's latest correction per video (labels are keyed by videoId, so a new one replaces the old). */
+  async getLabels(videoIds: string[]): Promise<(Label | undefined)[]> {
+    const tx = (await this.db).transaction("labels");
+    return Promise.all(videoIds.map((id) => tx.store.get(id)));
   }
 
   async listLabels(): Promise<Label[]> {

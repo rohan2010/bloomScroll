@@ -1,5 +1,7 @@
 import {
   NO_MODEL_REASON,
+  USER_HIDDEN,
+  USER_SHOWN,
   type BackendStatus,
   type DecideRequest,
   type DecideResponse,
@@ -12,6 +14,8 @@ import type { Decision, Settings, VideoTile } from "../shared/types";
 import { decisionKey, loadSettings, modeUsesModel, onSettingsChanged } from "../shared/settings";
 import { DebugPanel } from "./debug";
 import { HiddenDrawer, type HiddenEntry } from "./drawer";
+import { HideButton } from "./feedback";
+import { TILE } from "./selectors";
 import { extractTiles, surfaceFor } from "./extract";
 import { animationsOn, applyUiToggles, applyVerdict, clearTile, injectStyles, isHidden, markPending } from "./hide";
 import { PagePerf, type Phase } from "./perf";
@@ -47,6 +51,8 @@ let generation = 0;
 const perf = new PagePerf();
 const drawer = new HiddenDrawer(showAnyway);
 const debug = new DebugPanel();
+const hideButton = new HideButton(hideByUser);
+const TILE_SELECTOR = TILE.join(",");
 let backendStatus: BackendStatus | undefined;
 let debugTimer: ReturnType<typeof setTimeout> | undefined;
 let debugTicker: ReturnType<typeof setInterval> | undefined;
@@ -85,6 +91,7 @@ function shutDown(): void {
   for (const el of tracked.keys()) if (el.getAttribute("data-bloom") === "pending") applyVerdict(el, { verdict: "show" });
   drawer.setVisible(false);
   debug.setVisible(false);
+  hideButton.remove();
   console.info("[bloomScroll] extension was reloaded; reload this tab to filter again.");
 }
 
@@ -154,6 +161,8 @@ function applyDecisions({ decisions, startedWall }: Answer, phase: Phase): void 
   for (const [el, t] of tracked) {
     const d = decisions.get(t.tile.videoId);
     if (!d || el.getAttribute("data-bloom-id") !== t.tile.videoId) continue;
+    // A correction made while this answer was in flight wins over it.
+    if (t.decision && (t.decision.reason === USER_HIDDEN || t.decision.reason === USER_SHOWN) && d.reason !== t.decision.reason) continue;
     const first = !t.decision;
     t.decision = d;
     applyVerdict(el, overrides.has(d.videoId) ? { verdict: "show" } : d, animate);
@@ -276,16 +285,59 @@ function refreshDrawer(): void {
   renderDebugSoon();
 }
 
-function showAnyway({ tile }: HiddenEntry): void {
-  overrides.add(tile.videoId);
-  for (const [el, t] of tracked) if (t.tile.videoId === tile.videoId) applyVerdict(el, { verdict: "show" }, animationsOn(settings));
+/** Applies and stores a correction. Stored labels win over every stage on later visits too. */
+function correct(tile: VideoTile, verdict: Decision["verdict"]): void {
+  const d: Decision = {
+    videoId: tile.videoId,
+    verdict,
+    confidence: 1,
+    stage: "rule",
+    reason: verdict === "show" ? USER_SHOWN : USER_HIDDEN,
+    modeId: "",
+    decidedAt: Date.now(),
+  };
+  if (verdict === "show") overrides.add(tile.videoId);
+  else overrides.delete(tile.videoId);
+  for (const [el, t] of tracked) {
+    if (t.tile.videoId !== tile.videoId) continue;
+    t.decision = d;
+    applyVerdict(el, d, animationsOn(settings));
+  }
   refreshDrawer();
   const msg: LabelRequest = {
     type: "label",
-    label: { videoId: tile.videoId, title: tile.title, channel: tile.channel, userVerdict: "show", at: Date.now() },
+    label: { videoId: tile.videoId, title: tile.title, channel: tile.channel, userVerdict: verdict, at: Date.now() },
   };
   if (!contextAlive()) return shutDown();
   chrome.runtime.sendMessage(msg).catch(() => {});
+}
+
+function showAnyway({ tile }: HiddenEntry): void {
+  correct(tile, "show");
+}
+
+function hideByUser(el: Element): void {
+  const t = tracked.get(el);
+  if (t) correct(t.tile, "hide");
+}
+
+/** The tracked (outermost) tile under an element, if any. Rich items wrap lockups, so climb. */
+function tileFrom(node: EventTarget | null): Element | undefined {
+  let el = node instanceof Element ? node.closest(TILE_SELECTOR) : null;
+  while (el) {
+    if (tracked.has(el)) return el;
+    el = el.parentElement?.closest(TILE_SELECTOR) ?? null;
+  }
+  return undefined;
+}
+
+function onPointerOver(e: PointerEvent): void {
+  if (orphaned || hideButton.owns(e)) return;
+  const tile = tileFrom(e.target);
+  const filtering = surfaceFor(location.pathname) !== null && settings.mode !== "off";
+  if (tile && filtering && tile.getAttribute("data-bloom") === "show") {
+    if (hideButton.current !== tile) hideButton.showFor(tile);
+  } else if (hideButton.current) hideButton.hide();
 }
 
 // ---------------------------------------------------------------------------------------- debug overlay
@@ -363,6 +415,17 @@ async function main(): Promise<void> {
   removeListeners = () => {
     document.removeEventListener("yt-navigate-start", warm);
     document.removeEventListener("yt-navigate-finish", navigated);
+  };
+
+  // Hide button on hover; it hides itself on scroll rather than chasing the tile.
+  const hideOnScroll = () => hideButton.hide();
+  document.addEventListener("pointerover", onPointerOver, { passive: true });
+  addEventListener("scroll", hideOnScroll, { passive: true });
+  const removeNav = removeListeners;
+  removeListeners = () => {
+    removeNav?.();
+    document.removeEventListener("pointerover", onPointerOver);
+    removeEventListener("scroll", hideOnScroll);
   };
 
   observer = new MutationObserver(scheduleScan);

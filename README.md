@@ -16,8 +16,9 @@ computer: no account, no tracking, nothing sent anywhere.
 
 </div>
 
-> **Status:** early release. It works today on YouTube's home page, search results and the
-> "up next" sidebar. Feedback buttons, schedules and calibration are on the way.
+> **Status:** early release, with updates coming soon. It works today on YouTube's home page,
+> search results and the "up next" sidebar. bloomScroll is built and tested on a Mac; Windows and
+> Linux may work, but haven't been tested yet.
 
 ---
 
@@ -28,6 +29,7 @@ computer: no account, no tracking, nothing sent anywhere.
 - [Get started](#get-started) (pick the easy path if you're new to this)
 - [Everyday use](#everyday-use)
 - [How it works](#how-it-works)
+- [Will it slow down my computer?](#will-it-slow-down-my-computer)
 - [What you need](#what-you-need)
 - [Troubleshooting](#troubleshooting)
 - [Privacy](#privacy)
@@ -43,7 +45,8 @@ one question: *is this what I came for?*
   topics, like "home espresso" or "AI research".
 - **Off-topic videos are removed** with a short dissolve effect, and the gap closes up.
 - **You stay in control.** A small "N hidden" button lists everything that was removed and why,
-  with one click to bring any video back.
+  with one click to bring any video back, and hovering a video gives you a **Hide** button for
+  anything that slipped through. Your corrections are remembered.
 - **Extra clean-up:** hide Shorts, comments and end-of-video suggestions with a switch each.
 
 It decides on your own computer, using a small AI model that ships inside the extension and,
@@ -74,6 +77,7 @@ nothing beyond a browser and one free tool. You can add path B later.
 | Filters with | your channel lists, title keywords and a built-in mini AI model | all of that, plus Laya, a bigger AI model on your computer for the unclear cases |
 | Accuracy | good: in tests it caught 16 of 20 off-topic videos and never hid a wanted one | best: the unclear cases get a second opinion |
 | Needs | Chrome, Edge or Brave, plus Node.js | the same, plus Python and about 2 GB of disk space |
+| Effect on your computer | barely noticeable | some memory while it's working, little when idle ([why it's worth it](#will-it-slow-down-my-computer)) |
 | Setup time | about 5 minutes | about 10–15 minutes (mostly downloading) |
 
 ### Path A: the easy way
@@ -115,7 +119,13 @@ the bloomScroll icon to pick a mode or add your own topics under ⚙ Settings.
 ### Path B: add the local AI (Laya)
 
 Laya is a small open-source AI model that runs on your computer and settles the videos the
-built-in model isn't sure about. You need Python 3.10–3.12, or **3.11 on an Intel Mac**; the setup
+built-in model isn't sure about.
+
+**Why Laya?** It keeps bloomScroll private and free. Your watching habits are personal, so the
+deciding happens on your own machine: no titles leave it, there's no subscription or API key, and
+it keeps working offline. Laya is small enough to run on an ordinary laptop (this was built on a
+2017 MacBook Pro), and it's designed for exactly this kind of quick yes-or-no decision. Hosted
+models like Jev are supported as an option, but nobody needs one. You need Python 3.10–3.12, or **3.11 on an Intel Mac**; the setup
 tells you if anything is missing and how to get it.
 
 ```bash
@@ -169,12 +179,33 @@ Pick one in the toolbar popup.
   else.
 - **Clean up YouTube:** hide Shorts, comments and end-of-video suggestions.
 - **Model backend:** optional. Leave it on Local Laya if you followed path B.
+- **Calibrate to your taste:** review a few videos and let bloomScroll tune itself (below).
 - **Your data:** export the corrections you've made as a CSV, or delete everything.
 
 ### When it gets one wrong
 
-Click the **N hidden** button at the bottom right of YouTube, find the video, click **Show**.
-It comes back, and bloomScroll saves the correction. Future versions will learn from these.
+- **It hid something you wanted:** click the **N hidden** button at the bottom right of YouTube,
+  find the video, click **Show**.
+- **It kept something you didn't want:** hover over the video and click the **Hide** button that
+  appears at its top-left corner.
+
+Either way, bloomScroll remembers: that video stays shown (or hidden) on later visits, in every
+mode except Off. Your corrections also feed [calibration](#calibrate-it-to-your-taste), and you can
+export or delete them under Settings → Your data.
+
+### Calibrate it to your taste
+
+Everyone draws the line somewhere different. Under ⚙ Settings → **Calibrate to your taste**:
+
+1. Click **Review videos**. bloomScroll shows recent videos one at a time; press **→** for
+   on-topic, **←** for off-topic, **↓** to skip. Your Show and Hide corrections on YouTube count too.
+2. Once you have 40 answers (at least 10 of each kind), click **Run calibration**.
+3. It finds the settings that make the fewest mistakes on your answers, with hiding something you
+   wanted counted as twice as bad, and tests them on answers it didn't learn from. You see before
+   and after side by side, then choose **Apply** or **Discard**. **Reset thresholds to defaults**
+   undoes it any time.
+
+More answers make it more accurate. With Laya running, calibration tunes Laya's cutoff too.
 
 ### Debug overlay (for the curious)
 
@@ -219,6 +250,42 @@ Decisions are cached for 14 days, so a video you've seen before is instant.
 
 The whole speed audit, including what didn't work, is in [`server/README.md`](server/README.md).
 
+## Will it slow down my computer?
+
+Short answer: **path A, no. Path B, only while it's working, and you can switch it off any time.**
+These numbers come from the slowest machine bloomScroll targets, a 2017 MacBook Pro with 8 GB of
+memory.
+
+- **The built-in model (both paths)** is 23 MB. It does a moment of work when new videos appear,
+  then sits idle. YouTube itself uses far more of your computer than bloomScroll does.
+- **Laya (path B)** needs up to about 1.5 GB of memory while it's reading titles, about as much as
+  a few busy browser tabs. When you're not on YouTube it uses essentially no processor time, and
+  the operating system reclaims its memory: after a quiet spell we measured it holding just 4 MB.
+  The next time you open YouTube, bloomScroll wakes it up in the background while the page loads.
+- **It only reads what it has to.** Rules and the built-in model settle most videos (35 of 40 in
+  our test feed), so Laya typically reads a handful of titles per page, about 0.4 s each.
+- **It's yours to switch off.** Close the Laya window and bloomScroll quietly falls back to path A.
+  Nothing breaks, and nothing gets stuck hidden.
+
+**Why run it locally at all?** The alternative is sending your viewing to someone else's servers.
+A hosted model would mean a subscription or API key, an internet connection, and a company seeing
+every title you scroll past. Running Laya yourself costs some memory while you browse; in return
+your habits stay on your machine, it's free, and it works offline. And a few seconds of your
+laptop's time is a good trade for the hour a recommended rabbit hole can take.
+
+### What's coming to make it lighter, faster and smarter
+
+bloomScroll is an early release, and performance is the main focus of the next updates. These are
+planned, not promises:
+
+- **No separate server.** Run Laya inside the extension itself, so path B needs no Python, no
+  terminal window and no background process.
+- **Lighter models.** Smaller, compressed versions of the model that use a fraction of the memory.
+  The first attempt cost too much accuracy, so it isn't shipped until it's both fast *and* right.
+- **Faster on newer Macs.** Use Apple Silicon's built-in acceleration (M1 and later).
+- **Smarter over time.** Calibration already tunes bloomScroll to your answers. Next, it will learn
+  from your corrections directly, so it gets more accurate the more you use it.
+
 ## What you need
 
 | | Path A (easy) | Path B (local AI) |
@@ -228,7 +295,8 @@ The whole speed audit, including what didn't work, is in [`server/README.md`](se
 | pnpm | not needed: `setup.sh` uses it through Node's corepack | same |
 | Python | not needed | 3.10–3.12; **3.11 on an Intel Mac** |
 | Disk space | about 50 MB | about 2 GB (PyTorch plus the 846 MB model) |
-| Operating system | macOS (tested), Linux, Windows via Git Bash or WSL (untested) | macOS (tested); Linux and WSL (untested) |
+| Memory | very little ([details](#will-it-slow-down-my-computer)) | up to about 1.5 GB while Laya is working, much less when idle ([details](#will-it-slow-down-my-computer)) |
+| Operating system | built and tested on macOS; Linux and Windows (Git Bash or WSL) may work, untested | built and tested on macOS; Linux and WSL untested |
 
 `setup.sh` installs the Python side from pinned requirement files, so you don't have to:
 
@@ -306,10 +374,11 @@ Laya is already running somewhere. Find it with `lsof -nP -iTCP:8765 -sTCP:LISTE
 </details>
 
 <details>
-<summary><b>It hid a video I wanted</b></summary>
+<summary><b>It hid a video I wanted, or kept one I didn't</b></summary>
 
-Click **N hidden** at the bottom right, then **Show** next to it. For a channel you always want,
-add it under Settings → **Always show**.
+Click **N hidden** at the bottom right, then **Show** next to the video. For one that slipped
+through, hover over it and click **Hide**. Both are remembered. For a whole channel, add it under
+Settings → **Always show** or **Never show**.
 </details>
 
 Still stuck? With the debug overlay on, press **Copy** and paste the result into an

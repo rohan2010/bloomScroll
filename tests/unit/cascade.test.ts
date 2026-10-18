@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DecisionBackend } from "../../extension/src/background/backends";
 import { cacheKey, channelListed, decideBatch, modeIdFor, ruleDecision, titleMentions, type DecisionStore, type Embedder } from "../../extension/src/background/cascade";
 import { DEFAULT_SETTINGS } from "../../extension/src/shared/settings";
+import { emptyMetrics } from "../../extension/src/shared/messages";
 import type { Decision, Settings, VideoTile } from "../../extension/src/shared/types";
 
 const tile = (videoId: string, title: string, channel = "Some Channel", extra: Partial<VideoTile> = {}): VideoTile => ({
@@ -146,6 +147,32 @@ describe("decideBatch", () => {
     await decideBatch([tile("a", "mystery")], { settings: settings({ mode: "learn", topics: ["woodworking"] }), backend });
     await decideBatch([tile("b", "mystery")], { settings: settings({ mode: "work", topics: ["woodworking"] }), backend });
     expect(seen).toEqual([["programming, software, computers, AI", "woodworking"], ["programming, software, computers, AI"]]);
+  });
+
+  it("user corrections win over every stage, aren't cached, and don't count as fail-open", async () => {
+    const labels = {
+      getLabels: async (ids: string[]) =>
+        ids.map((id) =>
+          id === "hidden" ? { videoId: id, title: "", channel: "", userVerdict: "hide" as const, at: 1 } : id === "shown" ? { videoId: id, title: "", channel: "", userVerdict: "show" as const, at: 1 } : undefined,
+        ),
+    };
+    const store = memoryStore();
+    const metrics = emptyMetrics();
+    const backend = mockBackend({ shown: 0.01 });
+    const ds = await decideBatch([tile("hidden", "Linux kernel deep dive"), tile("shown", "mystery")], { settings: settings(), labels, store, backend, metrics });
+    expect(ds.map((d) => [d.videoId, d.verdict, d.reason])).toEqual([
+      ["hidden", "hide", "you hid this"],
+      ["shown", "show", "you chose to show this"],
+    ]);
+    expect(backend.calls).toHaveLength(0);
+    expect(store.map.size).toBe(0);
+    expect(metrics).toMatchObject({ rule: 2, failOpen: 0 });
+  });
+
+  it("ignores corrections when filtering is off", async () => {
+    const labels = { getLabels: async (ids: string[]) => ids.map((id) => ({ videoId: id, title: "", channel: "", userVerdict: "hide" as const, at: 1 })) };
+    const [d] = await decideBatch([tile("a", "anything")], { settings: settings({ mode: "off" }), labels });
+    expect(d).toMatchObject({ verdict: "show", reason: "filtering off" });
   });
 
   it("falls through to the model when the embedder fails", async () => {

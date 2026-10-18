@@ -75,6 +75,41 @@
         </div>
       </form>
 
+      <section id="calibrate">
+        <h2>Calibrate to your taste</h2>
+        <p class="hint">
+          bloomScroll learns where to draw the line from your answers: the videos you showed or hid on YouTube, plus a quick
+          review here. Calibration then tests itself on answers it didn't learn from, and changes nothing until you click Apply.
+        </p>
+        <div class="cal-progress">
+          <div class="meter" aria-hidden="true"><i id="cal-meter"></i></div>
+          <span id="cal-count" class="hint"></span>
+        </div>
+        <div class="actions">
+          <button id="review-start" type="button" class="primary">Review videos</button>
+          <button id="cal-run" type="button">Run calibration</button>
+          <button id="cal-reset" type="button" class="link">Reset thresholds to defaults</button>
+          <span id="cal-status" role="status"></span>
+        </div>
+
+        <div id="review" class="review" hidden>
+          <div class="review-card" aria-live="polite">
+            <div id="rv-index" class="hint"></div>
+            <div id="rv-title" class="rv-title"></div>
+            <div id="rv-channel" class="hint"></div>
+          </div>
+          <p class="question">Is this what you come to YouTube for?</p>
+          <div class="actions">
+            <button id="rv-yes" type="button" class="primary">On-topic <kbd>→</kbd></button>
+            <button id="rv-no" type="button" class="danger">Off-topic <kbd>←</kbd></button>
+            <button id="rv-skip" type="button">Skip <kbd>↓</kbd></button>
+            <button id="rv-done" type="button" class="link">Done</button>
+          </div>
+        </div>
+
+        <div id="cal-report" class="report" hidden></div>
+      </section>
+
       <section>
         <h2>Your data</h2>
         <p id="label-count" class="hint"></p>

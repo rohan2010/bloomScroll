@@ -2,6 +2,7 @@ import type { BackendKind, Label, Settings } from "../shared/types";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "../shared/settings";
 import { JEV_BASE_URL } from "../background/backends/jev";
 import { IdbCache } from "../background/cache";
+import { setupCalibration } from "./calibration";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const cache = new IdbCache();
@@ -93,6 +94,16 @@ async function main(): Promise<void> {
   let current = await loadSettings();
   fill(current);
   refreshLabelCount();
+  const calibration = setupCalibration({
+    cache,
+    getSettings: () => current,
+    setSettings: async (s) => {
+      await saveSettings(s);
+      current = s;
+      fill(current);
+    },
+  });
+  calibration.refresh();
 
   $("kind").addEventListener("change", () => {
     // Swap the URL to the new kind's default unless the user typed a custom one.
@@ -112,7 +123,7 @@ async function main(): Promise<void> {
     granted.then(async (ok) => {
       await saveSettings(next);
       current = next;
-      setStatus(ok ? "Saved." : `Saved, but the backend at ${next.backend.url} isn't allowed, so filtering will use rules only.`);
+      setStatus(ok ? "Saved." : `Saved, but the backend at ${next.backend.url} isn't allowed, so it won't be used. Rules and the built-in model still filter.`);
     });
   });
 
@@ -129,6 +140,7 @@ async function main(): Promise<void> {
     if (!confirm("Delete all labels and cached decisions? This can't be undone.")) return;
     await Promise.all([cache.clearLabels(), cache.clearDecisions()]);
     refreshLabelCount();
+    calibration.refresh();
     setStatus("Data deleted.");
   });
 }

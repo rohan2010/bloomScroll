@@ -1,7 +1,7 @@
 // Decision cascade: rules → embeddings → model → fallback. The cheapest confident stage wins.
 
-import type { Decision, Settings, VideoTile } from "../shared/types";
-import { NO_MODEL_REASON, type CascadeMetrics } from "../shared/messages";
+import type { Decision, Label, Settings, VideoTile } from "../shared/types";
+import { NO_MODEL_REASON, USER_HIDDEN, USER_SHOWN, type CascadeMetrics } from "../shared/messages";
 import { modelTopicsFor, modeUsesModel, topicsFor } from "../shared/settings";
 import type { DecisionBackend } from "./backends";
 import { PROMPT_VERSION } from "./backends/jevWire";
@@ -17,12 +17,19 @@ export interface Embedder {
 
 export interface DecisionStore {
   getMany(keys: string[]): Promise<(Decision | undefined)[]>;
-  putMany(decisions: Decision[]): Promise<void>;
+  putMany(decisions: (Decision & { title?: string; channel?: string })[]): Promise<void>;
+}
+
+/** The user's corrections from the Hidden drawer and the Hide button. */
+export interface LabelStore {
+  getLabels(videoIds: string[]): Promise<(Label | undefined)[]>;
 }
 
 export type CascadeDeps = {
   settings: Settings;
   store?: DecisionStore | null;
+  /** Checked before everything else: a video the user showed or hid stays that way. */
+  labels?: LabelStore | null;
   embedder?: Embedder | null;
   backend?: DecisionBackend | null;
   /** Opt-in Jev, used only when the primary model is below modelMinConf. */
@@ -143,12 +150,24 @@ export async function decideBatch(tiles: VideoTile[], deps: CascadeDeps): Promis
     return d;
   };
 
-  // 0. Cache
+  // 0a. The user's own corrections win over everything, in every filtering mode. Not cached as
+  // decisions: the label store is the source of truth, and the user can flip it.
+  if (deps.labels && s.mode !== "off") {
+    const labels = await deps.labels.getLabels(unique.map((t) => t.videoId)).catch(() => []);
+    labels.forEach((l) => {
+      if (!l) return;
+      decided.set(l.videoId, { verdict: l.userVerdict, confidence: 1, stage: "rule", reason: l.userVerdict === "show" ? USER_SHOWN : USER_HIDDEN });
+      uncacheable.add(l.videoId);
+    });
+  }
+
+  // 0b. Cache
   if (store) {
-    const hits = await store.getMany(unique.map((t) => cacheKey(modeId, t.videoId))).catch(() => []);
+    const pendingIds = unique.filter((t) => !decided.has(t.videoId));
+    const hits = await store.getMany(pendingIds.map((t) => cacheKey(modeId, t.videoId))).catch(() => []);
     hits.forEach((d) => d && cached.set(d.videoId, d));
   }
-  let open = unique.filter((t) => !cached.has(t.videoId));
+  let open = unique.filter((t) => !cached.has(t.videoId) && !decided.has(t.videoId));
   const msCache = lap();
 
   // 1. Rules
@@ -221,14 +240,18 @@ export async function decideBatch(tiles: VideoTile[], deps: CascadeDeps): Promis
   const msModel = lap();
 
   const fresh: Decision[] = [...decided].map(([videoId, d]) => ({ videoId, ...d, modeId, decidedAt: now() }));
-  if (store) await store.putMany(fresh.filter((d) => !uncacheable.has(d.videoId))).catch(() => {});
+  if (store) {
+    const tileById = new Map(unique.map((t) => [t.videoId, t]));
+    const rows = fresh.filter((d) => !uncacheable.has(d.videoId)).map((d) => ({ ...d, title: tileById.get(d.videoId)?.title, channel: tileById.get(d.videoId)?.channel }));
+    await store.putMany(rows).catch(() => {});
+  }
 
   const byId = new Map<string, Decision>([...cached, ...fresh.map((d) => [d.videoId, d] as const)]);
   if (m) {
     m.tiles += unique.length;
     m.cached += cached.size;
     for (const d of fresh) {
-      if (uncacheable.has(d.videoId)) m.failOpen++;
+      if (d.reason === NO_MODEL_REASON) m.failOpen++;
       else m[d.stage]++;
     }
     m.deferred += deps.stages === "fast" ? open.length : 0;
