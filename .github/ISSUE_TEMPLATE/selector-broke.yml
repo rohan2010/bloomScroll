@@ -1,0 +1,48 @@
+name: Selector broke
+description: bloomScroll stopped finding or filtering videos on a YouTube page.
+title: "Selector broke: "
+labels: ["selector broke"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        YouTube changes its page layout often. When it does, bloomScroll stops finding videos.
+        Thanks for reporting: this is the most useful kind of issue.
+  - type: dropdown
+    id: page
+    attributes:
+      label: Which page?
+      options:
+        - Home page
+        - Search results
+        - Sidebar next to a video (watch page)
+        - Somewhere else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: For example "the popup says 'No video tiles found'" or "nothing gets hidden any more".
+    validations:
+      required: true
+  - type: input
+    id: tiles
+    attributes:
+      label: Tile count in the popup
+      description: Open the bloomScroll popup on that page. What does "This tab" show?
+      placeholder: "0 shown, 0 hidden"
+  - type: input
+    id: version
+    attributes:
+      label: bloomScroll version and browser
+      placeholder: "v0.1.0, Chrome 130 on macOS"
+  - type: textarea
+    id: html
+    attributes:
+      label: Tile HTML (optional, very helpful)
+      description: |
+        In a private window, right-click a video title → Inspect → right-click the tile's outer
+        element (e.g. ytd-rich-item-renderer) → Copy → Copy outerHTML, and paste it here.
+        Use a private window so it doesn't include your account.
+      render: html

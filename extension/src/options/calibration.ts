@@ -131,7 +131,7 @@ export function setupCalibration(ctx: Ctx): { refresh: () => Promise<void> } {
       return el;
     };
     if (!r.ok) {
-      p(r.reason === "mode" ? "Switch to Work or Learn mode first: calibration tunes the filtering those modes use." : `Not enough answers yet: ${r.counts.labels} (${r.counts.wanted} on-topic, ${r.counts.unwanted} off-topic). Review more videos.`, "notice");
+      p(r.reason === "mode" ? "Switch to Learn mode first: calibration tunes the filtering it uses." : `Not enough answers yet: ${r.counts.labels} (${r.counts.wanted} on-topic, ${r.counts.unwanted} off-topic). Review more videos.`, "notice");
       return;
     }
     const b: CalibrationScores = r.before;

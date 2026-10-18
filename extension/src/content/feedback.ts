@@ -38,10 +38,15 @@ export class HideButton {
       this.hide();
       if (tile) this.onHide(tile);
     });
-    // Moving from the tile onto the button must not count as leaving.
-    this.btn.addEventListener("pointerleave", (e) => {
-      if (!(e.relatedTarget instanceof Node) || !this.target?.contains(e.relatedTarget)) this.hide();
-    });
+    // Keep page-level handlers (YouTube's preview, link navigation) from seeing the press.
+    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup"]) this.btn.addEventListener(type, (e) => e.stopPropagation());
+  }
+
+  /** Whether the point is over the visible button (with a little slack for imprecise pointers). */
+  contains(x: number, y: number): boolean {
+    if (!this.btn.classList.contains("on")) return false;
+    const r = this.btn.getBoundingClientRect();
+    return x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6;
   }
 
   get current(): Element | undefined {
@@ -52,8 +57,9 @@ export class HideButton {
     if (!this.host.isConnected) document.documentElement.appendChild(this.host);
     this.target = tile;
     const r = tile.getBoundingClientRect();
+    // Keep it inside the viewport (and below YouTube's 56 px masthead) when the tile is cut off.
     // Top-left corner of the tile, inset so it sits on the thumbnail.
-    this.btn.style.top = `${Math.max(8, r.top + 8)}px`;
+    this.btn.style.top = `${Math.min(innerHeight - 40, Math.max(64, r.top + 8))}px`;
     this.btn.style.left = `${r.left + 8}px`;
     this.btn.classList.add("on");
   }
@@ -63,10 +69,6 @@ export class HideButton {
     this.btn.classList.remove("on");
   }
 
-  /** True when the pointer event happened on the button itself. */
-  owns(e: Event): boolean {
-    return e.composedPath().includes(this.host);
-  }
 
   remove(): void {
     this.hide();

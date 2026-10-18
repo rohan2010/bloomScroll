@@ -1,7 +1,7 @@
 import { OFF_TITLES, ON_TITLES } from "../unit/titles";
 
 /** A YouTube-shaped home feed (same markup extract.ts reads) built from the 40 labeled titles. */
-export function homeFeedHtml(): string {
+export function homeFeedHtml(opts: { hoverPreview?: boolean } = {}): string {
   // Interleave so on- and off-topic tiles sit next to each other, as on a real feed.
   const titles = ON_TITLES.flatMap((t, i) => [{ t, on: true, i }, { t: OFF_TITLES[i], on: false, i }]);
   const hue = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -31,5 +31,22 @@ export function homeFeedHtml(): string {
     #text { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.8); color: #fff; font-size: 12px; padding: 1px 4px; border-radius: 4px; }
     h3 { margin: 10px 0 4px; font-size: 15px; line-height: 1.35; } a { color: inherit; text-decoration: none; }
     ytd-channel-name { color: #aaa; font-size: 13px; }
-  </style></head><body><ytd-app><ytd-browse page-subtype="home"><ytd-rich-grid-renderer><div id="contents">${tiles}</div></ytd-rich-grid-renderer></ytd-browse></ytd-app></body></html>`;
+  </style></head><body><ytd-app><ytd-browse page-subtype="home"><ytd-rich-grid-renderer><div id="contents">${tiles}</div></ytd-rich-grid-renderer></ytd-browse></ytd-app>${opts.hoverPreview ? PREVIEW_SCRIPT : ""}</body></html>`;
 }
+
+/**
+ * Mimics YouTube's inline hover preview: a player element that lives outside the tile (under
+ * ytd-app) and is positioned over the thumbnail, so pointer events land on it, not the tile.
+ */
+const PREVIEW_SCRIPT = `<script>
+  const preview = document.createElement("ytd-video-preview");
+  preview.style.cssText = "position:fixed;display:none;z-index:500;border-radius:12px;background:repeating-linear-gradient(45deg,#222 0 10px,#333 10px 20px);";
+  document.querySelector("ytd-app").appendChild(preview);
+  document.addEventListener("mouseover", (e) => {
+    const thumb = e.target.closest && e.target.closest("#thumbnail");
+    if (!thumb) return;
+    const r = thumb.getBoundingClientRect();
+    Object.assign(preview.style, { display: "block", left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+  });
+  preview.addEventListener("mouseleave", () => (preview.style.display = "none"));
+</script>`;

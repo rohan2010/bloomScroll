@@ -35,6 +35,8 @@ export type BackendKind = "laya" | "openjev" | "jev";
 
 export type Settings = {
   topics: string[]; // plain-language intents
+  /** Learn mode: also keep the built-in tech topics. Off for people who want only their own topics. */
+  includeTech: boolean;
   allowChannels: string[];
   blockChannels: string[];
   hideShorts: boolean;

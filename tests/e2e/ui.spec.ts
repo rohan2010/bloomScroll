@@ -131,3 +131,73 @@ test("hover Hide removes a kept video and the correction survives a reload; Show
   await expect.poll(decided, { timeout: 60_000 }).toBe(40);
   await expect(rust).toHaveAttribute("data-bloom", "show");
 });
+
+test("popup offers Learn / Relax / Off, the toolbar badge counts hidden videos, and tech can be switched off", async ({ context, extensionId }) => {
+  const options = await context.newPage();
+  await options.goto(`chrome-extension://${extensionId}/src/options/index.html`);
+  await options.evaluate(async () => {
+    const { settings = {} } = await chrome.storage.local.get("settings");
+    await chrome.storage.local.set({ settings: { ...settings, mode: "learn", topics: [], includeTech: true, backend: { kind: "laya", url: "http://127.0.0.1:9" } } });
+  });
+  const page = await context.newPage();
+  await page.route("https://www.youtube.com/**", (r) => r.fulfill({ contentType: "text/html", body: homeFeedHtml() }));
+  await page.goto("https://www.youtube.com/");
+  const decided = () => page.locator("ytd-rich-item-renderer[data-bloom=show], ytd-rich-item-renderer[data-bloom=hide]").count();
+  await expect.poll(decided, { timeout: 60_000 }).toBe(40);
+  const hidden = await page.locator("ytd-rich-item-renderer[data-bloom=hide]").count();
+
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
+  await expect(popup.locator("[data-mode]")).toHaveText(["Learn", "Relax", "Off"]);
+  await expect(popup.locator("#nudge")).toBeVisible(); // no topics yet
+
+  // Badge on the YouTube tab shows the hidden count.
+  const badges = await options.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    return Promise.all(tabs.map((t) => chrome.action.getBadgeText({ tabId: t.id! })));
+  });
+  expect(badges).toContain(String(hidden));
+
+  // Only "woodworking", tech off: tech tiles are no longer protected by the tech topics.
+  await options.evaluate(async () => {
+    const { settings } = await chrome.storage.local.get("settings");
+    await chrome.storage.local.set({ settings: { ...settings, topics: ["woodworking"], includeTech: false } });
+  });
+  await expect.poll(decided, { timeout: 60_000 }).toBe(40);
+  await expect
+    .poll(() => page.locator('ytd-rich-item-renderer[data-bloom=hide]:has(a[href*="v=n"])').count(), { timeout: 30_000 })
+    .toBeGreaterThan(5);
+  await popup.reload();
+  await expect(popup.locator("#nudge")).toBeHidden();
+  await expect(popup.locator("#mode-hint")).toHaveText("Only your topics. Shorts hidden.");
+});
+
+test("Hide button stays clickable over YouTube's hover preview", async ({ context, extensionId }) => {
+  const options = await context.newPage();
+  await options.goto(`chrome-extension://${extensionId}/src/options/index.html`);
+  await options.evaluate(async () => {
+    const { settings = {} } = await chrome.storage.local.get("settings");
+    await chrome.storage.local.set({ settings: { ...settings, mode: "learn", topics: [], includeTech: true, animations: false, backend: { kind: "laya", url: "http://127.0.0.1:9" } } });
+  });
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.route("https://www.youtube.com/**", (r) => r.fulfill({ contentType: "text/html", body: homeFeedHtml({ hoverPreview: true }) }));
+  await page.goto("https://www.youtube.com/");
+  await expect.poll(() => page.locator("ytd-rich-item-renderer[data-bloom=show], ytd-rich-item-renderer[data-bloom=hide]").count(), { timeout: 60_000 }).toBe(40);
+
+  const tile = page.locator('ytd-rich-item-renderer:has(a[href="/watch?v=n0000000001"])');
+  const box = (await tile.locator("#thumbnail").boundingBox())!;
+  // Hover the thumbnail: the fake preview now covers it, like YouTube's inline player.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+  await expect(page.locator("ytd-video-preview")).toBeVisible();
+  const btn = page.locator("bloomscroll-feedback").locator(".btn.on");
+  await expect(btn).toBeVisible();
+
+  // Travel slowly from the middle of the thumbnail to the button, over the preview, then click.
+  const b = (await btn.boundingBox())!;
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 15 });
+  await expect(btn).toBeVisible();
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(tile).toHaveAttribute("data-bloom", "hide");
+});

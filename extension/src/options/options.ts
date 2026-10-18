@@ -21,6 +21,7 @@ function num(id: string, fallback: number, min = 0, max = 1): number {
 
 function fill(s: Settings): void {
   $<HTMLTextAreaElement>("topics").value = s.topics.join("\n");
+  $<HTMLInputElement>("includeTech").checked = s.includeTech;
   $<HTMLTextAreaElement>("allow").value = s.allowChannels.join("\n");
   $<HTMLTextAreaElement>("block").value = s.blockChannels.join("\n");
   $<HTMLInputElement>("hideShorts").checked = s.hideShorts;
@@ -50,6 +51,7 @@ function read(current: Settings): Settings {
   return {
     ...current,
     topics: lines("topics"),
+    includeTech: $<HTMLInputElement>("includeTech").checked,
     allowChannels: lines("allow"),
     blockChannels: lines("block"),
     hideShorts: $<HTMLInputElement>("hideShorts").checked,

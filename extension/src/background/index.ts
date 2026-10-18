@@ -69,7 +69,10 @@ async function backendStatus(s: Settings): Promise<BackendStatus> {
   }
 }
 
-async function handle(msg: BackgroundMessage): Promise<unknown> {
+chrome.action.setBadgeBackgroundColor({ color: "#1f8a53" }).catch(() => {});
+chrome.action.setBadgeTextColor?.({ color: "#ffffff" })?.catch?.(() => {});
+
+async function handle(msg: BackgroundMessage, sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (msg.type) {
     case "decide": {
       const settings = await loadSettings();
@@ -87,6 +90,9 @@ async function handle(msg: BackgroundMessage): Promise<unknown> {
       return { ok: true };
     case "status":
       return backendStatus(await loadSettings());
+    case "badge":
+      if (sender.tab?.id !== undefined) await chrome.action.setBadgeText({ tabId: sender.tab.id, text: msg.count > 0 ? String(Math.min(msg.count, 999)) : "" });
+      return { ok: true };
     case "review-sample":
       return { items: await cache.sampleForReview(msg.n) };
     case "calibrate": {
@@ -99,8 +105,8 @@ async function handle(msg: BackgroundMessage): Promise<unknown> {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg: BackgroundMessage, _sender, sendResponse) => {
-  if (!["decide", "label", "warm", "status", "review-sample", "calibrate"].includes(msg?.type)) return;
-  handle(msg).then(sendResponse, (err) => sendResponse({ error: String(err) }));
+chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendResponse) => {
+  if (!["decide", "label", "warm", "status", "review-sample", "calibrate", "badge"].includes(msg?.type)) return;
+  handle(msg, sender).then(sendResponse, (err) => sendResponse({ error: String(err) }));
   return true; // async response
 });

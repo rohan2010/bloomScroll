@@ -25,6 +25,11 @@ button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.danger { color: var(--danger); }
 #status, #cal-status { color: var(--muted); }
+.advanced { margin: 14px 0; }
+.advanced > summary { cursor: pointer; color: var(--muted); padding: 6px 2px; }
+.advanced > summary:hover { color: var(--fg); }
+.advanced[open] > summary { margin-bottom: 4px; }
+.check small { color: var(--muted); }
 button.link { border: 0; background: transparent; color: var(--accent); padding: 7px 4px; }
 .cal-progress { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; }
 .meter { flex: 0 0 160px; height: 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }

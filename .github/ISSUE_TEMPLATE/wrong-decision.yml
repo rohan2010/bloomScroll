@@ -1,0 +1,49 @@
+name: Wrong decision
+description: bloomScroll hid a video you wanted, or kept one you didn't.
+title: "Wrong decision: "
+labels: ["wrong decision"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tip: you can fix a single video yourself with **Show** in the Hidden drawer or **Hide** on
+        hover, and those are remembered. This report helps make bloomScroll better for everyone.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong?
+      options:
+        - It hid a video I wanted
+        - It kept a video I didn't want
+    validations:
+      required: true
+  - type: input
+    id: video
+    attributes:
+      label: Video title and channel
+    validations:
+      required: true
+  - type: textarea
+    id: topics
+    attributes:
+      label: Your mode and topics
+      description: Mode from the popup (Learn / Relax), your topics from Settings, and whether "Also keep programming and tech videos" is on.
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Model backend
+      options:
+        - None (built-in model only)
+        - Local Laya
+        - Jev (TypeSafe)
+        - Not sure
+  - type: textarea
+    id: report
+    attributes:
+      label: Debug report (optional, very helpful)
+      description: |
+        Popup → turn on **Debug overlay** → on YouTube press **Copy** in the bottom-left panel and
+        paste here. It includes titles and channels of recent videos; remove any you'd rather not share.
+      render: json

@@ -96,7 +96,10 @@ export type CalibrateRequest = { type: "calibrate" };
 export type ReviewItem = { videoId: string; title: string; channel: string; verdict: "show" | "hide"; reason: string };
 export type ReviewSampleRequest = { type: "review-sample"; n: number };
 
-export type BackgroundMessage = DecideRequest | LabelRequest | WarmRequest | StatusRequest | CalibrateRequest | ReviewSampleRequest;
+/** Hidden count for the sending tab, shown on the toolbar icon. */
+export type BadgeRequest = { type: "badge"; count: number };
+
+export type BackgroundMessage = DecideRequest | LabelRequest | WarmRequest | StatusRequest | CalibrateRequest | ReviewSampleRequest | BadgeRequest;
 
 /** Service worker → offscreen document. Vectors come back L2-normalized, so dot product = cosine. */
 export type EmbedRequest = { target: "offscreen"; type: "embed"; texts: string[] };

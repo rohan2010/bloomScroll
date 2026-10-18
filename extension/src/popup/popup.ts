@@ -1,6 +1,6 @@
 import type { BackendStatus, StatsResponse, StatusRequest } from "../shared/messages";
 import type { Mode, Settings } from "../shared/types";
-import { loadSettings, modeUsesModel, onSettingsChanged, updateSettings } from "../shared/settings";
+import { learnUsesTech, loadSettings, modeUsesModel, onSettingsChanged, updateSettings } from "../shared/settings";
 
 const HINTS: Record<Mode, string> = {
   work: "Tech topics and allowlisted channels only. Shorts hidden.",
@@ -26,7 +26,10 @@ function formatMs(ms: number | undefined): string {
 
 function renderSettings(s: Settings): void {
   for (const b of modeButtons) b.setAttribute("aria-checked", String(b.dataset.mode === s.mode));
-  $("mode-hint").textContent = HINTS[s.mode];
+  $("mode-hint").textContent =
+    s.mode === "learn" ? (learnUsesTech(s) ? (s.topics.length ? "Tech plus your topics. Shorts hidden." : "Tech videos for now. Shorts hidden.") : "Only your topics. Shorts hidden.") : HINTS[s.mode];
+  // First run: nothing personal set yet, so point at Settings.
+  $("nudge").hidden = !(s.mode === "learn" && s.topics.length === 0);
   $("state-line").textContent = s.mode === "off" ? "Filtering paused" : `Filtering · ${MODE_NAME[s.mode]} mode`;
 
   for (const id of SWITCHES) $<HTMLInputElement>(id).checked = s[id];
@@ -132,6 +135,7 @@ async function main(): Promise<void> {
   const openOptions = () => chrome.runtime.openOptionsPage();
   $("options").addEventListener("click", openOptions);
   $("model-fix").addEventListener("click", openOptions);
+  $("nudge").addEventListener("click", openOptions);
   onSettingsChanged((next) => renderSettings((s = next)));
 
   // Keep the tab numbers live while the popup is open.

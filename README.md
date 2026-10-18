@@ -33,6 +33,7 @@ computer: no account, no tracking, nothing sent anywhere.
 - [What you need](#what-you-need)
 - [Troubleshooting](#troubleshooting)
 - [Privacy](#privacy)
+- [Contributing](#contributing)
 - [For developers](#for-developers)
 
 ## What it does
@@ -41,8 +42,8 @@ You open YouTube to learn something, and the home page offers you pranks, drama 
 other distractions. bloomScroll reads the title and channel of every video on the page and asks
 one question: *is this what I came for?*
 
-- **On-topic videos stay.** By default that means programming and tech. You can add your own
-  topics, like "home espresso" or "AI research".
+- **On-topic videos stay.** You tell it your topics in plain words, like "woodworking" or "AI
+  research". Until you do, it keeps programming and tech videos.
 - **Off-topic videos are removed** with a short dissolve effect, and the gap closes up.
 - **You stay in control.** A small "N hidden" button lists everything that was removed and why,
   with one click to bring any video back, and hovering a video gives you a **Hide** button for
@@ -60,8 +61,8 @@ The real extension on a test feed of 40 videos: off-topic ones dissolve, the res
 
 | Toolbar popup | Hidden drawer | Debug overlay |
 | :---: | :---: | :---: |
-| <img src="docs/assets/popup.png" width="260" alt="The bloomScroll popup: Work, Learn, Relax and Off modes; this tab shows 24 shown, 16 hidden, 0 pending, settled in 1.5 s; model status; switches for Shorts, comments, end screens, vanish animation and debug overlay."> | <img src="docs/assets/drawer.png" width="260" alt="The Hidden drawer listing 16 removed videos, each with the stage that removed it, its channel, the reason and a Show button."> | <img src="docs/assets/debug.png" width="260" alt="The debug overlay: time until the page settled, counts, a coloured bar of which stage decided how many videos, per-video timings and recent decisions."> |
-| Pick a mode, see what happened on this tab, flip clean-up switches. | Everything removed from this page, and why. One click brings a video back. | For the curious: timings and what decided each video. |
+| <img src="docs/assets/popup.png" width="260" alt="The bloomScroll popup: Learn, Relax and Off modes; this tab shows 24 shown, 16 hidden, 0 pending, settled in 1.5 s; model status; switches for Shorts, comments, end screens, vanish animation and debug overlay."> | <img src="docs/assets/drawer.png" width="260" alt="The Hidden drawer listing 16 removed videos, each with the stage that removed it, its channel, the reason and a Show button."> | <img src="docs/assets/debug.png" width="260" alt="The debug overlay: time until the page settled, counts, a coloured bar of which stage decided how many videos, per-video timings and recent decisions."> |
+| Pick a mode, see what happened on this tab, flip clean-up switches. The toolbar icon also shows how many videos were hidden. | Everything removed from this page, and why. One click brings a video back. | For the curious: timings and what decided each video. |
 
 *These screenshots come from a test browser without the optional local AI connected, which is
 why the popup shows a red "not allowed yet" row. Once you click **Save → Allow** in Settings, it
@@ -164,17 +165,21 @@ Pick one in the toolbar popup.
 
 | Mode | What stays on the page | Shorts |
 | --- | --- | --- |
-| **Work** | Tech and programming only, plus channels you always allow | Hidden |
-| **Learn** | Tech plus your own topics (add them in Settings) | Hidden |
+| **Learn** | Your topics (add them in Settings), plus programming and tech unless you switch that off | Hidden |
 | **Relax** | Everything except channels you've blocked | Your choice |
 | **Off** | Everything. Only the clean-up switches apply | Your choice |
+
+Until you add topics of your own, Learn keeps programming and tech videos, and the popup reminds
+you to tell bloomScroll what you come for. A stricter **Work** mode is being reworked and will
+return in a later update.
 
 ### Settings (⚙ in the popup)
 
 <img src="docs/assets/options.png" width="560" alt="The Settings page: Your intent (topics, one per line), Always show and Never show channel lists, clean-up switches, and the model backend.">
 
 - **Your intent:** topics you care about, one per line. Plain words work best ("woodworking",
-  "AI research").
+  "AI research"). Not into tech? Untick **Also keep programming and tech videos** and only your
+  own topics stay.
 - **Always show / Never show:** channel names or @handles, one per line. These win over everything
   else.
 - **Clean up YouTube:** hide Shorts, comments and end-of-video suggestions.
@@ -394,6 +399,21 @@ Still stuck? With the debug overlay on, press **Copy** and paste the result into
   and delete.
 
 Details: [docs/PRIVACY.md](docs/PRIVACY.md).
+
+## Contributing
+
+Help is very welcome, and much of it needs no code:
+
+- **YouTube changed and bloomScroll stopped working?** Open a
+  [Selector broke](https://github.com/rohan2010/bloomScroll/issues/new?template=selector-broke.yml) issue.
+- **It got a video wrong?** Open a
+  [Wrong decision](https://github.com/rohan2010/bloomScroll/issues/new?template=wrong-decision.yml)
+  issue with the debug overlay's **Copy** report.
+- **On Windows or Linux?** Tell us whether setup worked; those platforms are untested.
+- **Want to code?** Start with [CONTRIBUTING.md](CONTRIBUTING.md): setup, tests, ground rules and
+  good first contributions.
+
+See [what we're planning](CONTRIBUTING.md#what-were-planning) for the roadmap.
 
 ## For developers
 

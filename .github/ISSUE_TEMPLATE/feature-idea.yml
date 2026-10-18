@@ -1,0 +1,22 @@
+name: Idea
+description: Suggest a feature or improvement.
+labels: ["idea"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like bloomScroll to do, and why?
+      description: Describe the problem or situation first; the solution can come later.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How might it work?
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Fits the ground rules?
+      description: See CONTRIBUTING.md. bloomScroll stays private, fails open and stays light.
+      options:
+        - label: This doesn't need sending people's data anywhere new.

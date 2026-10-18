@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideShorts: true,
   hideComments: false,
   hideEndscreen: true,
+  includeTech: true,
   mode: "learn",
   debug: false,
   animations: true,
@@ -62,11 +63,18 @@ function pick<T extends object>(obj: Partial<T> | undefined, keys: (keyof T)[]):
   return out;
 }
 
+/**
+ * Work mode is hidden from the UI for now (it comes back once the rest of the UX settles). Anyone
+ * saved in Work moves to Learn, which with no topics of their own behaves the same.
+ */
+export const WORK_MODE_ENABLED = false;
+
 export function mergeSettings(stored: Partial<Settings> | undefined): Settings {
   const s = stored ?? {};
   return {
     ...DEFAULT_SETTINGS,
     ...s,
+    mode: !WORK_MODE_ENABLED && s.mode === "work" ? "learn" : (s.mode ?? DEFAULT_SETTINGS.mode),
     backend: { ...DEFAULT_SETTINGS.backend, ...s.backend },
     // Thresholds saved for an older prompt or scoring mean something else now: start from defaults.
     thresholdsVersion: DEFAULT_SETTINGS.thresholdsVersion,
@@ -97,7 +105,7 @@ export async function updateSettings(patch: Partial<Settings>): Promise<Settings
  * left out, so flipping them doesn't throw away and re-run every decision on the page.
  */
 export function decisionKey(s: Settings): string {
-  return JSON.stringify([s.mode, s.topics, s.allowChannels, s.blockChannels, s.backend, s.thresholds]);
+  return JSON.stringify([s.mode, s.topics, s.includeTech, s.allowChannels, s.blockChannels, s.backend, s.thresholds]);
 }
 
 export function onSettingsChanged(cb: (s: Settings) => void): void {
@@ -116,14 +124,19 @@ export const TECH_SUMMARY = "programming, software, computers, AI";
 /** Intent text for the model prompt: the short tech summary, plus the user's topics in Learn. */
 export function modelTopicsFor(s: Settings): string[] {
   if (s.mode === "work") return [TECH_SUMMARY];
-  if (s.mode === "learn") return [TECH_SUMMARY, ...s.topics];
+  if (s.mode === "learn") return learnUsesTech(s) ? [TECH_SUMMARY, ...s.topics] : s.topics;
   return [];
+}
+
+/** Without tech and without topics there'd be nothing to keep, so tech stays on until topics exist. */
+export function learnUsesTech(s: Settings): boolean {
+  return s.includeTech || s.topics.length === 0;
 }
 
 /** Topics for keyword rules and embeddings, where a longer, specific list is free and helps. */
 export function topicsFor(s: Settings): string[] {
   if (s.mode === "work") return TECH_TOPICS;
-  if (s.mode === "learn") return [...new Set([...TECH_TOPICS, ...s.topics])];
+  if (s.mode === "learn") return learnUsesTech(s) ? [...new Set([...TECH_TOPICS, ...s.topics])] : s.topics;
   return [];
 }
 

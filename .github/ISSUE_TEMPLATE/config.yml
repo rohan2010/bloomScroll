@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How to set up bloomScroll
+    url: https://github.com/rohan2010/bloomScroll#get-started
+    about: Step-by-step setup, including the easy path with no AI server.
+  - name: Troubleshooting
+    url: https://github.com/rohan2010/bloomScroll#troubleshooting
+    about: Answers to the most common problems.

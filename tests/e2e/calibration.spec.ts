@@ -30,9 +30,12 @@ test("review recent videos with the keyboard, run calibration, see a before/afte
     if (await options.locator("#review").isHidden()) break; // nothing left to review
     while (await options.locator("#review").isVisible()) {
       const title = (await options.locator("#rv-title").textContent()) ?? "";
+      const index = (await options.locator("#rv-index").textContent()) ?? "";
       if (SHOTS && answered === 0) await options.locator("#calibrate").screenshot({ path: `${SHOTS}/calibrate-review.png` });
       await options.keyboard.press(wanted.has(title) ? "ArrowRight" : "ArrowLeft");
       answered++;
+      // Wait for the next card (or the end of the queue) before answering again.
+      await expect.poll(async () => (await options.locator("#review").isHidden()) || (await options.locator("#rv-index").textContent()) !== index).toBe(true);
     }
   }
   console.log(`answered ${answered}`);

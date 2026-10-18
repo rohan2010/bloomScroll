@@ -8,6 +8,7 @@ import {
   type LabelRequest,
   type StatsResponse,
   type StatusRequest,
+  type BadgeRequest,
   type WarmRequest,
 } from "../shared/messages";
 import type { Decision, Settings, VideoTile } from "../shared/types";
@@ -15,7 +16,6 @@ import { decisionKey, loadSettings, modeUsesModel, onSettingsChanged } from "../
 import { DebugPanel } from "./debug";
 import { HiddenDrawer, type HiddenEntry } from "./drawer";
 import { HideButton } from "./feedback";
-import { TILE } from "./selectors";
 import { extractTiles, surfaceFor } from "./extract";
 import { animationsOn, applyUiToggles, applyVerdict, clearTile, injectStyles, isHidden, markPending } from "./hide";
 import { PagePerf, type Phase } from "./perf";
@@ -52,7 +52,6 @@ const perf = new PagePerf();
 const drawer = new HiddenDrawer(showAnyway);
 const debug = new DebugPanel();
 const hideButton = new HideButton(hideByUser);
-const TILE_SELECTOR = TILE.join(",");
 let backendStatus: BackendStatus | undefined;
 let debugTimer: ReturnType<typeof setTimeout> | undefined;
 let debugTicker: ReturnType<typeof setInterval> | undefined;
@@ -117,6 +116,7 @@ async function scan(): Promise<void> {
   if (!surface || settings.mode === "off") {
     if (tracked.size) resetAll();
     drawer.setVisible(false);
+    updateBadge(0);
     renderDebugSoon();
     return;
   }
@@ -279,10 +279,21 @@ function counts() {
   return { found: lastFound.length, shown: lastFound.length - pending - hidden, hidden, pending, queue: modelQueue.size };
 }
 
+let lastBadge = -1;
+
 function refreshDrawer(): void {
   for (const el of tracked.keys()) if (!el.isConnected) tracked.delete(el);
-  drawer.update(hiddenEntries());
+  const hidden = hiddenEntries();
+  drawer.update(hidden);
+  updateBadge(hidden.length);
   renderDebugSoon();
+}
+
+/** Hidden count on the toolbar icon for this tab; only sent when it changes. */
+function updateBadge(count: number): void {
+  if (count === lastBadge || orphaned || !contextAlive()) return;
+  lastBadge = count;
+  chrome.runtime.sendMessage({ type: "badge", count } satisfies BadgeRequest).catch(() => {});
 }
 
 /** Applies and stores a correction. Stored labels win over every stage on later visits too. */
@@ -321,23 +332,53 @@ function hideByUser(el: Element): void {
   if (t) correct(t.tile, "hide");
 }
 
-/** The tracked (outermost) tile under an element, if any. Rich items wrap lockups, so climb. */
-function tileFrom(node: EventTarget | null): Element | undefined {
-  let el = node instanceof Element ? node.closest(TILE_SELECTOR) : null;
-  while (el) {
-    if (tracked.has(el)) return el;
-    el = el.parentElement?.closest(TILE_SELECTOR) ?? null;
+// Hover tracking for the Hide button works by position, not by which element is under the pointer:
+// YouTube's inline preview player sits on top of a hovered thumbnail but lives elsewhere in the
+// DOM, so element-based hover lost the tile (and hid the button) as soon as the preview appeared.
+
+let pointer: { x: number; y: number } | undefined;
+let hoverFrame = 0;
+
+function inside(r: DOMRect, x: number, y: number): boolean {
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
+/** The kept tile whose box contains the point, preferring the current one. */
+function keptTileAt(x: number, y: number): Element | undefined {
+  const current = hideButton.current;
+  if (current?.isConnected && current.getAttribute("data-bloom") === "show" && inside(current.getBoundingClientRect(), x, y)) return current;
+  for (const el of lastFound) {
+    if (el.getAttribute("data-bloom") !== "show" || !el.isConnected) continue;
+    if (inside(el.getBoundingClientRect(), x, y)) return el;
   }
   return undefined;
 }
 
-function onPointerOver(e: PointerEvent): void {
-  if (orphaned || hideButton.owns(e)) return;
-  const tile = tileFrom(e.target);
+function updateHover(): void {
+  hoverFrame = 0;
+  if (orphaned || !pointer) return;
   const filtering = surfaceFor(location.pathname) !== null && settings.mode !== "off";
-  if (tile && filtering && tile.getAttribute("data-bloom") === "show") {
-    if (hideButton.current !== tile) hideButton.showFor(tile);
-  } else if (hideButton.current) hideButton.hide();
+  if (!filtering) return hideButton.hide();
+  // On the button itself: keep it, even if a scroll moved the tile out from under it.
+  if (hideButton.current && hideButton.contains(pointer.x, pointer.y)) return;
+  const tile = keptTileAt(pointer.x, pointer.y);
+  if (tile) hideButton.showFor(tile); // also repositions after a scroll
+  else hideButton.hide();
+}
+
+function scheduleHover(): void {
+  if (!hoverFrame) hoverFrame = requestAnimationFrame(updateHover);
+}
+
+function onPointerMove(e: PointerEvent): void {
+  if (e.pointerType === "touch") return;
+  pointer = { x: e.clientX, y: e.clientY };
+  scheduleHover();
+}
+
+function onPointerLeavePage(): void {
+  pointer = undefined;
+  hideButton.hide();
 }
 
 // ---------------------------------------------------------------------------------------- debug overlay
@@ -417,15 +458,17 @@ async function main(): Promise<void> {
     document.removeEventListener("yt-navigate-finish", navigated);
   };
 
-  // Hide button on hover; it hides itself on scroll rather than chasing the tile.
-  const hideOnScroll = () => hideButton.hide();
-  document.addEventListener("pointerover", onPointerOver, { passive: true });
-  addEventListener("scroll", hideOnScroll, { passive: true });
+  // Hide button: follows the pointer by position, and the tile when the page scrolls.
+  document.addEventListener("pointermove", onPointerMove, { passive: true });
+  document.documentElement.addEventListener("pointerleave", onPointerLeavePage, { passive: true });
+  addEventListener("scroll", scheduleHover, { passive: true });
   const removeNav = removeListeners;
   removeListeners = () => {
     removeNav?.();
-    document.removeEventListener("pointerover", onPointerOver);
-    removeEventListener("scroll", hideOnScroll);
+    document.removeEventListener("pointermove", onPointerMove);
+    document.documentElement.removeEventListener("pointerleave", onPointerLeavePage);
+    removeEventListener("scroll", scheduleHover);
+    cancelAnimationFrame(hoverFrame);
   };
 
   observer = new MutationObserver(scheduleScan);

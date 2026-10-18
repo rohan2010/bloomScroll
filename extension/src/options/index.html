@@ -14,8 +14,9 @@
       <form id="form">
         <section>
           <h2>Your intent</h2>
-          <label for="topics">Topics, one per line. Used in Learn mode on top of the built-in tech topics.</label>
-          <textarea id="topics" rows="5" placeholder="Linux&#10;AI research&#10;woodworking"></textarea>
+          <label for="topics">What do you come to YouTube for? Topics in plain words, one per line.</label>
+          <textarea id="topics" rows="5" placeholder="woodworking&#10;AI research&#10;home espresso"></textarea>
+          <label class="check"><input type="checkbox" id="includeTech" /> Also keep programming and tech videos <small>(built-in topics; stays on until you add your own)</small></label>
         </section>
 
         <section class="cols">
@@ -33,7 +34,7 @@
 
         <section>
           <h2>Clean up YouTube</h2>
-          <label class="check"><input type="checkbox" id="hideShorts" /> Hide Shorts <small>(always hidden in Work and Learn)</small></label>
+          <label class="check"><input type="checkbox" id="hideShorts" /> Hide Shorts <small>(always hidden in Learn)</small></label>
           <label class="check"><input type="checkbox" id="hideComments" /> Hide comments</label>
           <label class="check"><input type="checkbox" id="hideEndscreen" /> Hide end-screen suggestions</label>
         </section>
@@ -60,14 +61,16 @@
           <p class="hint">The model backend is optional. Without one, bloomScroll still filters with your channel lists, title keywords and its built-in mini model, and shows anything it can't decide.</p>
         </section>
 
-        <section>
-          <h2>Thresholds</h2>
-          <p class="hint">Embedding margin = how much closer a title is to your topics than to off-topic categories (gaming, food, music…). Between the two margins, the model decides.</p>
+        <details class="advanced">
+          <summary>Advanced: thresholds</summary>
+          <section>
+          <p class="hint">Calibration (below) sets these for you. Embedding margin = how much closer a title is to your topics than to off-topic categories (gaming, food, music…). Between the two margins, the model decides.</p>
           <div class="row"><label for="embedMarginShow">Embedding show if margin ≥</label><input id="embedMarginShow" type="number" min="-1" max="1" step="0.01" /></div>
           <div class="row"><label for="embedMarginHide">Embedding hide if margin ≤</label><input id="embedMarginHide" type="number" min="-1" max="1" step="0.01" /></div>
           <div class="row"><label for="modelShow">Model show if P(on-intent) ≥</label><input id="modelShow" type="number" min="0" max="1" step="0.01" /></div>
           <div class="row"><label for="modelMinConf">Model min confidence</label><input id="modelMinConf" type="number" min="0.5" max="1" step="0.01" /></div>
-        </section>
+          </section>
+        </details>
 
         <div class="actions">
           <button type="submit" class="primary">Save</button>
