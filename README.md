@@ -134,6 +134,12 @@ on your own computer (`127.0.0.1`), never on your network. Wondering about memor
 | `bash setup.sh --no-autostart` | Everything, but Laya doesn't start at login; start it yourself with `server/start.sh` |
 | `bash setup.sh --remove-autostart` | Stop Laya starting at login (and stop it now) |
 
+Laya's own files (its Python environment, start script and the Settings helper) go in
+`~/Library/Application Support/bloomScroll/` on a Mac, or `~/.local/share/bloomScroll/` on Linux,
+so it works wherever you keep the bloomScroll folder: macOS doesn't let programs running in the
+background read your Desktop, Documents or Downloads. The 846 MB model is in
+`~/.cache/huggingface/`.
+
 </details>
 
 ### Optional: Jev (hosted, with your own key)
@@ -319,7 +325,8 @@ corepack pnpm install        # or: npm i -g pnpm && pnpm install
 corepack pnpm build          # also downloads MiniLM and the ONNX runtime into public/
 cd ..
 
-# Local Laya server (optional). Use python3.11 on an Intel Mac.
+# Local Laya server (optional). Use python3.11 on an Intel Mac. A venv inside the folder works when
+# you start Laya by hand; setup.sh puts it in Application Support so the login item can run it.
 python3 -m venv server/.venv
 server/.venv/bin/python -m pip install -r server/requirements.txt    # or requirements-intel-mac.txt
 server/start.sh

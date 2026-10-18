@@ -16,8 +16,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$ROOT/server"
+# Where Laya runs from: its Python environment, start.sh, the Settings helper and the login item.
+# Outside the bloomScroll folder on purpose: macOS blocks background programs (the login item, the
+# browser's helper) from reading Desktop, Documents and Downloads, where people often unzip things.
+if [[ "$(uname -s)" == Darwin ]]; then
+  RUNTIME_DIR="${BLOOM_RUNTIME_DIR:-$HOME/Library/Application Support/bloomScroll}"
+else
+  RUNTIME_DIR="${BLOOM_RUNTIME_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bloomScroll}"
+fi
 EXT_DIR="$ROOT/extension"
-VENV="$SERVER_DIR/.venv"
+VENV="$RUNTIME_DIR/venv"
 LAYA_REPO="convaiinnovations/laya"
 LAYA_PORT="${LAYA_PORT:-8765}"
 AUTOSTART_LABEL="${BLOOM_AUTOSTART_LABEL:-com.bloomscroll.laya}"
@@ -109,13 +117,13 @@ remove_autostart() {
 
 if [[ $REMOVE_AUTOSTART -eq 1 ]]; then
   remove_autostart
-  printf '%s✓%s Laya will no longer start at login (and has been stopped). Start it by hand with: %s\n' "$G" "$X" "$SERVER_DIR/start.sh"
+  printf '%s✓%s Laya will no longer start at login (and has been stopped). Start it by hand with: %s\n' "$G" "$X" "$RUNTIME_DIR/start.sh"
   exit 0
 fi
 
 xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 
-AUTOSTART_DIR="$SERVER_DIR/autostart"
+AUTOSTART_DIR="$RUNTIME_DIR/autostart"
 PLIST_TEMPLATE="$AUTOSTART_DIR/$AUTOSTART_LABEL.plist"
 UNIT_TEMPLATE="$AUTOSTART_DIR/$UNIT_NAME"
 NATIVE_HOST="com.bloomscroll.laya"
@@ -126,7 +134,7 @@ NATIVE_HOST="com.bloomscroll.laya"
 # --no-autostart.
 write_service_files() {
   local start log_dir
-  start="$SERVER_DIR/start.sh"
+  start="$RUNTIME_DIR/start.sh"
   mkdir -p "$AUTOSTART_DIR"
   if [[ "$OS" == Darwin ]]; then
     log_dir="$HOME/Library/Logs/bloomScroll"
@@ -189,7 +197,7 @@ install_autostart() {
     systemctl --user enable --now "$UNIT_NAME" >/dev/null
     ok "Laya will start automatically when you log in (systemd user service $UNIT_NAME)"
   else
-    warn "Couldn't set up automatic start on this system. Start Laya by hand with: $SERVER_DIR/start.sh"
+    warn "Couldn't set up automatic start on this system. Start Laya by hand with: $RUNTIME_DIR/start.sh"
     return 1
   fi
 }
@@ -216,7 +224,7 @@ install_native_host() {
   else
     dirs=("$HOME/.config/google-chrome" "$HOME/.config/chromium" "$HOME/.config/BraveSoftware/Brave-Browser" "$HOME/.config/microsoft-edge")
   fi
-  chmod +x "$SERVER_DIR/native-host.sh" "$SERVER_DIR/laya_control.py"
+  chmod +x "$RUNTIME_DIR/native-host.sh" "$RUNTIME_DIR/laya_control.py"
   for d in "${dirs[@]}"; do
     [[ -d "$d" ]] || continue
     mkdir -p "$d/NativeMessagingHosts"
@@ -224,7 +232,7 @@ install_native_host() {
 {
   "name": "$NATIVE_HOST",
   "description": "bloomScroll: start and stop the local Laya model from Settings",
-  "path": "$SERVER_DIR/native-host.sh",
+  "path": "$RUNTIME_DIR/native-host.sh",
   "type": "stdio",
   "allowed_origins": [$origins]
 }
@@ -390,23 +398,25 @@ server_install() {
     REQS="$SERVER_DIR/requirements.txt"
   fi
 
-  step "Local Laya model: Python packages (server/.venv)"
+  step "Local Laya model: Python packages"
+  note "Installing into $RUNTIME_DIR/venv"
   note "Using $(basename "$REQS")"
   WANT_PY="$(py_version "$PY")"
   if [[ -x "$VENV/bin/python" ]]; then
     HAVE_PY="$(py_version "$VENV/bin/python" || echo broken)"
     if [[ "$HAVE_PY" != "$WANT_PY" ]]; then
-      warn "server/.venv uses Python $HAVE_PY, not $WANT_PY. Recreating it."
+      warn "Laya's environment uses Python $HAVE_PY, not $WANT_PY. Recreating it."
       rm -rf "$VENV"
     fi
   fi
   if [[ ! -x "$VENV/bin/python" ]]; then
+    mkdir -p "$RUNTIME_DIR"
     if ! "$PY" -m venv "$VENV" 2>"$LOG_DIR/venv.err"; then
       cat "$LOG_DIR/venv.err" >&2
       die "Couldn't create a Python virtual environment." \
         "On Debian/Ubuntu install the venv module: sudo apt install python${WANT_PY}-venv"
     fi
-    ok "Created server/.venv (Python $WANT_PY)"
+    ok "Created Laya's Python environment (Python $WANT_PY)"
   fi
 
   # Always '<venv>/bin/python -m pip', never a bare 'pip'/'pip3': those can point at another Python
@@ -428,7 +438,7 @@ server_install() {
     fi
     "$VPY" -m pip install --quiet -r "$REQS"
     "$VPY" -c 'import laya, fastapi, uvicorn, torch' || die "Packages installed but laya can't be imported." \
-      "Try deleting server/.venv and running bash setup.sh --server-only again."
+      "Try deleting $VENV and running bash setup.sh --server-only again."
     echo "$REQS_HASH" >"$MARKER"
     ok "Installed $("$VPY" -m pip show laya 2>/dev/null | awk '/^Version/{print "laya " $2}'), torch $("$VPY" -c 'import torch; print(torch.__version__)')"
   fi
@@ -450,10 +460,19 @@ path = snapshot_download(repo, **kw)
 size = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(path) for f in fs)
 print(f"  ✓ Checkpoint ready: {size / 1e6:.0f} MB in {path}")
 PY
-  chmod +x "$SERVER_DIR/start.sh"
+  install_runtime_scripts
+}
+
+# Copies the scripts that run in the background next to Laya's environment, every run, so updates
+# to the bloomScroll folder reach them.
+install_runtime_scripts() {
+  mkdir -p "$RUNTIME_DIR"
+  cp "$SERVER_DIR/start.sh" "$SERVER_DIR/laya_control.py" "$SERVER_DIR/native-host.sh" "$RUNTIME_DIR/"
+  chmod +x "$RUNTIME_DIR/start.sh" "$RUNTIME_DIR/laya_control.py" "$RUNTIME_DIR/native-host.sh"
 }
 
 SERVER_STATE="skipped"   # skipped | failed | installed | autostart | running
+OLD_VENV="$SERVER_DIR/.venv"
 if [[ $WANT_SERVER -eq 1 ]]; then
   # In a subshell so a Laya problem can't undo the extension that's already built: the person still
   # gets a working extension and a clear way to retry.
@@ -518,10 +537,14 @@ case "$SERVER_STATE" in
   running+autostart) printf '  %sLocal AI (Laya): running, and starts by itself whenever you log in.%s\n' "$G" "$X"
     printf '  %sTo stop that: bash setup.sh --remove-autostart%s\n' "$DIM" "$X" ;;
   autostart) printf '  Local AI (Laya): set to start at login; it may still be loading.\n' ;;
-  running) printf '  Local AI (Laya): running now. Start it again after a restart with: %s/start.sh\n' "$SERVER_DIR" ;;
-  installed) printf '  Local AI (Laya): installed. Start it with: %s/start.sh\n' "$SERVER_DIR" ;;
+  running) printf '  Local AI (Laya): running now. Start it again from Settings, or with: %s/start.sh\n' "$RUNTIME_DIR" ;;
+  installed) printf '  Local AI (Laya): installed. Start it from Settings, or with: %s/start.sh\n' "$RUNTIME_DIR" ;;
   failed) printf '  %sLocal AI (Laya): not set up yet. Fix the problem above, then run: bash setup.sh --server-only%s\n' "$Y" "$X" ;;
   skipped) [[ $WANT_SERVER -eq 0 ]] && printf '  %sNo local AI installed: filtering uses rules and the built-in model. Add it any time with: bash setup.sh --server-only%s\n' "$DIM" "$X" ;;
 esac
+
+if [[ $WANT_SERVER -eq 1 && $SERVER_STATE != failed && -d "$OLD_VENV" ]]; then
+  printf '\n  %sAn older copy of Laya'"'"'s environment is still in server/.venv (about 1 GB) and is no longer used.\n  You can delete it: rm -rf "%s"%s\n' "$DIM" "$OLD_VENV" "$X"
+fi
 
 rm -rf "$LOG_DIR" # logs are only kept when something fails

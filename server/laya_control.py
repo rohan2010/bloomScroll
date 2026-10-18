@@ -156,10 +156,19 @@ def stop(cfg):
             os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
-    for _ in range(40):
-        if not healthy(port) and not listening_pids(port):
+    for _ in range(120):  # PyTorch can take several seconds to exit; launchd a moment to unload
+        if not healthy(port) and not listening_pids(port) and not launched(cfg):
             return
         time.sleep(0.25)
+
+
+def launched(cfg):
+    """Whether Laya has been started and is meant to be running (it may still be loading)."""
+    if IS_MAC and os.path.exists(cfg.get("plist_template", "")):
+        return mac_loaded(cfg)
+    if not IS_MAC and os.path.exists(cfg.get("unit_template", "")):
+        return systemctl("is-active", unit_name(cfg)).stdout.strip() in ("active", "activating")
+    return bool(listening_pids(cfg["port"]))  # started by hand, no login item
 
 
 def status(cfg):
@@ -167,8 +176,9 @@ def status(cfg):
     running = healthy(port)
     return {
         "running": running,
-        # Process up but model still loading (the first start takes up to a minute).
-        "starting": not running and (bool(listening_pids(port)) or (IS_MAC and mac_loaded(cfg))),
+        # Launched but the model is still loading (the first start takes up to a minute). A process
+        # that is only shutting down after Stop doesn't count.
+        "starting": not running and launched(cfg),
         "autostart": autostart_enabled(cfg),
         "port": port,
     }
