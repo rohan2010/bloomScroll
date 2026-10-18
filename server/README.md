@@ -3,20 +3,37 @@
 bloomScroll calls `laya-serve` (from the `laya` package on PyPI) over the Jev wire API,
 `POST /v1/systemone/batch`. Verified with `laya` 0.4.11.
 
-## Setup (Intel Mac)
+## Setup
+
+`bash setup.sh --server-only` from the repo root does all of this for you. By hand:
+
+### Apple Silicon Mac, Linux or WSL
+
+Python 3.10–3.12, no pins beyond `laya` itself:
+
+```bash
+cd server
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
+```
+
+On Apple Silicon, current torch, transformers and NumPy 2 all work, and Laya picks the GPU (MPS)
+by itself: `/health` reports `"device": "mps"`. Verified on an M4 with Python 3.11.14, torch
+2.14.1, transformers 5.20.1 and NumPy 2.4.6.
+
+### Intel Mac
 
 PyTorch stopped shipping Intel-Mac builds at 2.2.2, and that release's compiler doesn't run on
-Python 3.12+. So on an Intel Mac use **Python 3.11** and pin the stack (this is Laya's own
+Python 3.12+. So on an Intel Mac use **Python 3.11** and the pinned file (this is Laya's own
 documented fix):
 
 ```bash
 cd server
 /usr/local/bin/python3.11 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install "numpy<2" "torch==2.2.2" "transformers==4.57.6" "laya[serve]==0.4.11"
+.venv/bin/python -m pip install -r requirements-intel-mac.txt
 ```
-
-Apple Silicon and Linux: skip the pins, `pip install "laya[serve]"` on Python 3.10+ is enough.
 
 Use `.venv/bin/python -m pip`, not a bare `pip3`: it always installs into this venv.
 

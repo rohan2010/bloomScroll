@@ -292,7 +292,8 @@ planned, not promises:
   background process.
 - **Lighter models.** Smaller, compressed versions of the model that use a fraction of the memory.
   The first attempt cost too much accuracy, so it isn't shipped until it's both fast *and* right.
-- **Faster on newer Macs.** Use Apple Silicon's built-in acceleration (M1 and later).
+- **Bigger models on newer Macs.** On Apple Silicon (M1 and later), Laya already runs on the
+  built-in GPU. Next, use that headroom for larger, more accurate models.
 - **Smarter over time.** Calibration already tunes bloomScroll to your answers. Next, it will learn
   from your corrections directly, so it gets more accurate the more you use it.
 

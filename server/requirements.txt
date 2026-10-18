@@ -7,9 +7,14 @@
 # its built-in embedding model.
 #
 # Easiest: run ./setup.sh from the repo root, which picks the right file and installs it into
-# server/.venv. By hand (Python 3.10-3.12):
+# ~/Library/Application Support/bloomScroll/venv on a Mac (~/.local/share/bloomScroll/venv on
+# Linux). By hand (Python 3.10-3.12):
 #   python3 -m venv server/.venv
 #   server/.venv/bin/python -m pip install -r server/requirements.txt
+#
+# On Apple Silicon nothing needs pinning: current torch, transformers and NumPy 2 all work, and
+# Laya runs on the GPU (MPS) by itself. Verified on an M4 Mac with Python 3.11.14, torch 2.14.1,
+# transformers 5.20.1 and NumPy 2.4.6 (/health reports "device": "mps").
 #
 # laya pulls in torch, transformers, huggingface_hub, tokenizers, safetensors and numpy; the
 # [serve] extra adds the HTTP server (fastapi, uvicorn, python-multipart). On Linux without an
